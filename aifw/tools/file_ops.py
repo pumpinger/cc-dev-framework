@@ -62,12 +62,18 @@ def _handle_edit_file(inp: dict, project_root: str) -> str:
     return f"Edited {inp['path']} ({count} replacement{'s' if count > 1 else ''})"
 
 
+_IGNORE_DIRS = {".git", ".aifw", "__pycache__", "node_modules", ".venv", "venv"}
+
+
 def _handle_list_files(inp: dict, project_root: str) -> str:
     root = Path(project_root).resolve()
     pattern = inp.get("pattern", "**/*")
     matches = []
     for path in root.rglob("*"):
         if path.is_file():
+            parts = path.relative_to(root).parts
+            if any(p in _IGNORE_DIRS for p in parts):
+                continue
             rel = path.relative_to(root).as_posix()
             if fnmatch.fnmatch(rel, pattern):
                 matches.append(rel)
@@ -92,6 +98,9 @@ def _handle_search_content(inp: dict, project_root: str) -> str:
     results = []
     for path in root.rglob("*"):
         if not path.is_file():
+            continue
+        parts = path.relative_to(root).parts
+        if any(p in _IGNORE_DIRS for p in parts):
             continue
         rel = path.relative_to(root).as_posix()
         if not fnmatch.fnmatch(rel, glob):

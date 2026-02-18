@@ -212,13 +212,17 @@ class BaseAgent:
         ))
 
         # Build assistant message from response content
+        # IMPORTANT: thinking blocks must include 'signature' for multi-turn
         assistant_content = []
         for block in response.content:
             if block.type == "thinking":
-                assistant_content.append({
+                thinking_block = {
                     "type": "thinking",
                     "thinking": block.thinking,
-                })
+                }
+                if hasattr(block, "signature") and block.signature:
+                    thinking_block["signature"] = block.signature
+                assistant_content.append(thinking_block)
             elif block.type == "text":
                 assistant_content.append({
                     "type": "text",
