@@ -1,0 +1,21 @@
+# aifw configuration
+# Copy to config.yaml and fill in your values.
+
+api_key: ${ANTHROPIC_API_KEY}  # or paste key directly
+
+model:
+  initializer: "claude-sonnet-4-6-20250514"
+  coder: "claude-sonnet-4-6-20250514"
+  verifier: "claude-haiku-4-5-20251001"
+
+limits:
+  max_turns_per_feature: 50
+  max_total_cost_usd: 10.0
+  bash_timeout_seconds: 120
+
+display:
+  show_thinking: true
+  show_tool_calls: true
+  show_tool_results: true
+  streaming: true
+  verbosity: "normal"  # quiet | normal | verbose
