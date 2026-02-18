@@ -34,7 +34,10 @@ class Orchestrator:
         self.state_dir = self.project_path / ".aifw"
         self.feature_store = FeatureStore(self.state_dir / "features.json")
         self.session_mgr = SessionManager(self.state_dir)
-        self.client = anthropic.Anthropic(api_key=config.api_key)
+        client_kwargs = {"api_key": config.api_key}
+        if config.base_url:
+            client_kwargs["base_url"] = config.base_url
+        self.client = anthropic.Anthropic(**client_kwargs)
         self.tool_registry = self._build_tools()
         self.callbacks = self._build_callbacks()
 

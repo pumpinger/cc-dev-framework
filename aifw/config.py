@@ -11,8 +11,8 @@ import yaml
 
 @dataclass
 class ModelConfig:
-    initializer: str = "claude-sonnet-4-6-20250514"
-    coder: str = "claude-sonnet-4-6-20250514"
+    initializer: str = "claude-sonnet-4-20250514"
+    coder: str = "claude-sonnet-4-20250514"
     verifier: str = "claude-haiku-4-5-20251001"
 
 
@@ -35,6 +35,7 @@ class DisplayConfig:
 @dataclass
 class Config:
     api_key: str = ""
+    base_url: str | None = None
     model: ModelConfig = field(default_factory=ModelConfig)
     limits: LimitsConfig = field(default_factory=LimitsConfig)
     display: DisplayConfig = field(default_factory=DisplayConfig)
@@ -50,12 +51,24 @@ class Config:
                 raw = yaml.safe_load(f) or {}
 
         # Resolve API key: env var takes precedence
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        # Support both ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN
+        api_key = (
+            os.environ.get("ANTHROPIC_API_KEY")
+            or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+            or ""
+        )
         raw_key = raw.get("api_key", "")
         if raw_key and not raw_key.startswith("${"):
             api_key = raw_key
         if not api_key:
-            api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+            api_key = (
+                os.environ.get("ANTHROPIC_API_KEY")
+                or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+                or ""
+            )
+
+        # Resolve base URL
+        base_url = os.environ.get("ANTHROPIC_BASE_URL") or raw.get("base_url") or None
 
         # Build sub-configs
         model_raw = raw.get("model", {})
@@ -93,7 +106,10 @@ class Config:
             verbosity=display_raw.get("verbosity", DisplayConfig.verbosity),
         )
 
-        return Config(api_key=api_key, model=model, limits=limits, display=display)
+        return Config(
+            api_key=api_key, base_url=base_url,
+            model=model, limits=limits, display=display,
+        )
 
     def validate(self) -> list[str]:
         """Return list of validation errors, empty if config is valid."""

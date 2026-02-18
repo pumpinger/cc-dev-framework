@@ -13,6 +13,7 @@ from aifw.tools.registry import ToolRegistry
 # Pricing per million tokens (as of 2025)
 MODEL_PRICING: dict[str, tuple[float, float]] = {
     # (input_per_M, output_per_M)
+    "claude-sonnet-4-20250514": (3.0, 15.0),
     "claude-sonnet-4-6-20250514": (3.0, 15.0),
     "claude-haiku-4-5-20251001": (0.80, 4.0),
     "claude-opus-4-6-20250514": (15.0, 75.0),
@@ -126,9 +127,11 @@ class BaseAgent:
         if tools:
             kwargs["tools"] = tools
         if self.thinking_budget > 0:
+            # API requires budget_tokens >= 1024 and < max_tokens
+            budget = max(self.thinking_budget, 1024)
             kwargs["thinking"] = {
                 "type": "enabled",
-                "budget_tokens": self.thinking_budget,
+                "budget_tokens": budget,
             }
 
         # Streaming call
