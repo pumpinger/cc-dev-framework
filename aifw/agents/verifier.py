@@ -75,8 +75,20 @@ class VerifierAgent:
         return agent.run(f"Verify feature: {feature.title} ({feature.id})")
 
     def result_passed(self, result: AgentResult) -> bool:
-        """Check if verifier output indicates PASS."""
-        return result.success and result.final_text.strip().upper().startswith("PASS")
+        """Check if verifier output indicates PASS.
+
+        Searches the entire output for a line starting with 'PASS'
+        since the verifier may output explanation text before the verdict.
+        """
+        if not result.success:
+            return False
+        text = result.final_text.upper()
+        # Check for PASS anywhere - the verifier often puts it at the end
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("PASS") or stripped.startswith("**PASS"):
+                return True
+        return False
 
     @staticmethod
     def _get_diff(project_path: str) -> str:

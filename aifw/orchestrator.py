@@ -167,8 +167,9 @@ class Orchestrator:
         self.feature_store.update_status(feature_id, "in_progress")
         session.current_feature_id = feature_id
 
-        # Create feature branch
+        # Create feature branch (delete if exists from previous failed attempt)
         branch_name = f"feature/{feature_id}"
+        self._git_run(["branch", "-D", branch_name])  # ignore error if not exists
         self._git_run(["checkout", "-b", branch_name])
 
         # Run Coder Agent
@@ -255,8 +256,12 @@ class Orchestrator:
         """Abandon a failed feature: go back to main, delete branch."""
         self.feature_store.mark_failed(feature_id, error[:500])
         main_branch = self._get_main_branch()
+        # Stash any uncommitted changes before switching branches
+        self._git_run(["stash", "--include-untracked"])
         self._git_run(["checkout", main_branch])
         self._git_run(["branch", "-D", branch_name])
+        # Restore stashed changes (mainly .aifw state)
+        self._git_run(["stash", "pop"])
 
     def _build_tools(self) -> ToolRegistry:
         registry = ToolRegistry(str(self.project_path))
@@ -268,10 +273,24 @@ class Orchestrator:
         return TerminalCallbacks(self.config.display)
 
     def _ensure_git(self) -> None:
-        """Make sure the project directory is a git repo."""
+        """Make sure the project directory is a git repo with .aifw in .gitignore."""
         git_dir = self.project_path / ".git"
         if not git_dir.exists():
             self._git_run(["init"])
+
+        # Ensure .aifw is in .gitignore to prevent branch switch conflicts
+        gitignore = self.project_path / ".gitignore"
+        if gitignore.exists():
+            content = gitignore.read_text(encoding="utf-8")
+        else:
+            content = ""
+        if ".aifw/" not in content:
+            with open(gitignore, "a", encoding="utf-8") as f:
+                if content and not content.endswith("\n"):
+                    f.write("\n")
+                f.write(".aifw/\n")
+
+        if not git_dir.exists():
             self._git_run(["add", "-A"])
             self._git_run(["commit", "-m", "initial commit", "--allow-empty"])
 
