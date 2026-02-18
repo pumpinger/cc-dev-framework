@@ -236,6 +236,8 @@ class Orchestrator:
             cwd=str(self.project_path),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         commit_hash = result.stdout.strip()
 
@@ -279,6 +281,8 @@ class Orchestrator:
             cwd=str(self.project_path),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         current = result.stdout.strip()
         if current and not current.startswith("feature/"):
@@ -289,6 +293,8 @@ class Orchestrator:
             cwd=str(self.project_path),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         branches = [b.strip().lstrip("* ") for b in result.stdout.splitlines()]
         for name in ("main", "master"):
@@ -303,6 +309,8 @@ class Orchestrator:
             capture_output=True,
             text=True,
             timeout=30,
+            encoding="utf-8",
+            errors="replace",
         )
         if result.returncode != 0 and result.stderr:
             # Non-fatal: log but don't crash

@@ -15,6 +15,8 @@ def _run_git(args: list[str], project_root: str) -> str:
             capture_output=True,
             text=True,
             timeout=30,
+            encoding="utf-8",
+            errors="replace",
         )
         output = result.stdout
         if result.stderr:

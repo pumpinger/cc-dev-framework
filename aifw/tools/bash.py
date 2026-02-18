@@ -19,6 +19,8 @@ def _handle_run_bash(inp: dict, project_root: str) -> str:
             capture_output=True,
             text=True,
             timeout=timeout,
+            encoding="utf-8",
+            errors="replace",
         )
         output_parts = []
         if result.stdout:

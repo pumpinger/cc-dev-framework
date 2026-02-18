@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import io
 import json
 import sys
 
 from aifw.agents.callbacks import AgentCallbacks, TurnStats
 from aifw.config import DisplayConfig
+
+# Force UTF-8 stdout on Windows to avoid GBK encoding errors
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(
+        sys.stdout.buffer, encoding="utf-8", errors="replace"
+    )
 
 # ANSI colors
 DIM = "\033[2m"

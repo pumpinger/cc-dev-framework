@@ -95,6 +95,8 @@ class CoderAgent:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                encoding="utf-8",
+                errors="replace",
             )
             return result.stdout.strip() or "(no commits yet)"
         except Exception:

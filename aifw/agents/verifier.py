@@ -87,6 +87,8 @@ class VerifierAgent:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                encoding="utf-8",
+                errors="replace",
             )
             return result.stdout or "(no diff)"
         except Exception:
