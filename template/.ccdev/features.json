@@ -1,0 +1,27 @@
+{
+  "project": "",
+  "goal": "",
+  "features": [
+    {
+      "id": "example-feature",
+      "title": "示例功能（请替换）",
+      "priority": 1,
+      "status": "pending",
+      "type": "feature",
+      "steps": [
+        {"description": "步骤描述", "done": false, "evidence": null}
+      ],
+      "verify_commands": [
+        "python -c \"print('verify ok')\""
+      ],
+      "done_evidence": {
+        "verify_results": [],
+        "gate_checks": [],
+        "all_passed": false,
+        "verified_at": null
+      },
+      "commit_hash": null,
+      "error": null
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "sessions": [
+    {
+      "date": "2025-01-01",
+      "completed": [],
+      "in_progress": null,
+      "current_step": null,
+      "summary": "示例会话记录（请替换）",
+      "next": "开始规划功能",
+      "blockers": []
+    }
+  ]
+}
