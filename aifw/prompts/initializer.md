@@ -31,6 +31,10 @@ You MUST call the `write_file` tool to write the feature list as a JSON file at 
 }
 ```
 
+## Shell / Platform Rules
+- This runs on **Windows**. Use `python` not `python3`.
+- Do NOT use heredoc syntax (`<< 'EOF'`). It does not work on Windows.
+
 ## Rules
 - Features must be ordered by priority (1 = do first)
 - Each feature should be completable in one session (30-50 agent turns)

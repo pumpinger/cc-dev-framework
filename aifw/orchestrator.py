@@ -167,9 +167,17 @@ class Orchestrator:
         self.feature_store.update_status(feature_id, "in_progress")
         session.current_feature_id = feature_id
 
-        # Create feature branch (delete if exists from previous failed attempt)
+        # Create feature branch (clean up if exists from previous failed attempt)
         branch_name = f"feature/{feature_id}"
+        main_branch = self._get_main_branch()
+        # Make sure we're on main before trying to delete the feature branch
+        current_branch = self._git_run(["branch", "--show-current"])
+        if current_branch == branch_name:
+            self._git_run(["checkout", main_branch])
         self._git_run(["branch", "-D", branch_name])  # ignore error if not exists
+        # Ensure we're on main before creating the feature branch
+        if self._git_run(["branch", "--show-current"]) != main_branch:
+            self._git_run(["checkout", main_branch])
         self._git_run(["checkout", "-b", branch_name])
 
         # Run Coder Agent
@@ -275,8 +283,9 @@ class Orchestrator:
     def _ensure_git(self) -> None:
         """Make sure the project directory is a git repo with .aifw in .gitignore."""
         git_dir = self.project_path / ".git"
-        if not git_dir.exists():
-            self._git_run(["init"])
+        needs_initial_commit = not git_dir.exists()
+        if needs_initial_commit:
+            self._git_run(["init", "-b", "main"])
 
         # Ensure .aifw is in .gitignore to prevent branch switch conflicts
         gitignore = self.project_path / ".gitignore"
@@ -290,11 +299,16 @@ class Orchestrator:
                     f.write("\n")
                 f.write(".aifw/\n")
 
-        if not git_dir.exists():
+        if needs_initial_commit:
             self._git_run(["add", "-A"])
             self._git_run(["commit", "-m", "initial commit", "--allow-empty"])
 
     def _get_main_branch(self) -> str:
+        # Return cached value if available
+        if hasattr(self, "_main_branch") and self._main_branch:
+            return self._main_branch
+
+        # Try to detect from current branch (only valid if not on a feature branch)
         result = subprocess.run(
             ["git", "branch", "--show-current"],
             cwd=str(self.project_path),
@@ -305,8 +319,10 @@ class Orchestrator:
         )
         current = result.stdout.strip()
         if current and not current.startswith("feature/"):
+            self._main_branch = current
             return current
-        # Fallback: find main or master
+
+        # Fallback: find main or master from branch list
         result = subprocess.run(
             ["git", "branch"],
             cwd=str(self.project_path),
@@ -318,7 +334,9 @@ class Orchestrator:
         branches = [b.strip().lstrip("* ") for b in result.stdout.splitlines()]
         for name in ("main", "master"):
             if name in branches:
+                self._main_branch = name
                 return name
+        self._main_branch = "master"
         return "master"
 
     def _git_run(self, args: list[str]) -> str:
