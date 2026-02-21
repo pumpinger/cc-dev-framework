@@ -38,6 +38,7 @@ from briefing import generate_executor_briefing, generate_planner_briefing
 from prompts import EXECUTOR_PROMPT, FIX_PROMPT, PLANNER_PROMPT
 from store import (
     Feature,
+    get_feature,
     load_feature_objects,
     load_features,
     save_features,
@@ -697,6 +698,10 @@ def main() -> None:
 def _execute_feature(feature: Feature, max_retries: int) -> bool:
     """Execute a single feature: start → code → verify loop.
 
+    The verify loop distinguishes two failure modes:
+      - steps_done failure → re-run Executor to complete remaining steps
+      - verify_commands failure → run Fixer to repair code
+
     Returns True on success, False if retries exhausted.
     """
     print()
@@ -712,43 +717,10 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
             update_feature_field(feature.id, status="failed", error="start.py failed")
             return False
 
-    # Determine start step (first undone)
-    start_step = 0
-    for i, s in enumerate(feature.steps):
-        if not s.done:
-            start_step = i
-            break
-    else:
-        # All steps already done — skip to verify
-        start_step = len(feature.steps)
+    # Run executor for the first time
+    _run_executor(feature)
 
-    # Call Claude executor (if steps remain)
-    if start_step < len(feature.steps):
-        briefing = generate_executor_briefing(PROJECT_DIR, feature, start_step)
-        prompt = EXECUTOR_PROMPT.format(
-            briefing=briefing,
-            feature_id=feature.id,
-            start_step=start_step,
-        )
-        system_note = (
-            "You are called by an orchestrator in executor mode. "
-            "Implement the feature steps. Use step.py to record progress. "
-            "Do NOT run verify.py / complete.py / archive.py."
-        )
-
-        result = call_claude(
-            prompt,
-            max_turns=30,
-            system_append=system_note,
-        )
-
-        if result.get("is_error"):
-            err = result.get("error", "unknown error")
-            print(f"[orchestrator] Claude executor error: {err}")
-            update_feature_field(feature.id, error=f"Executor error: {err}")
-            # Don't mark failed — might be recoverable
-
-    # Verify + fix loop
+    # Verify + retry loop
     for attempt in range(1, max_retries + 1):
         print(f"\n[orchestrator] Verify attempt {attempt}/{max_retries} for {feature.id}")
 
@@ -766,7 +738,7 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
                 return False
             return True
 
-        # GATE FAILED — extract errors and fix
+        # GATE FAILED — analyse which gates failed
         errors = extract_verify_errors(verify_output)
         print(f"[orchestrator] GATE FAILED: {errors['summary']}")
         for g in errors["failed_gates"]:
@@ -775,35 +747,101 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
         if attempt >= max_retries:
             break
 
-        # Call Claude to fix
-        vc_text = "\n".join(f"  {cmd}" for cmd in feature.verify_commands)
-        error_text = verify_output  # Pass full output for context
+        # Decide: re-run executor (steps incomplete) or fixer (code broken)
+        failed_gate_names = {g.split(":")[0].strip() for g in errors["failed_gates"]}
+        steps_incomplete = "steps_done" in failed_gate_names or "steps_evidence" in failed_gate_names
 
-        prompt = FIX_PROMPT.format(
-            feature_id=feature.id,
-            feature_title=feature.title,
-            verify_errors=error_text,
-            verify_commands=vc_text,
-        )
-        system_note = (
-            "You are called by an orchestrator in fix mode. "
-            "Fix the code so verify_commands pass. "
-            "Do NOT run verify.py / complete.py. Do NOT modify verify_commands."
-        )
-
-        result = call_claude(
-            prompt,
-            max_turns=20,
-            system_append=system_note,
-        )
-
-        if result.get("is_error"):
-            print(f"[orchestrator] Claude fixer error: {result.get('error', '')}")
+        if steps_incomplete:
+            # Steps not done — re-run executor to continue from where it left off
+            print(f"[orchestrator] Steps incomplete — re-running executor...")
+            # Reload feature to get fresh step status
+            feature = get_feature(feature.id)
+            if feature is None:
+                print(f"[orchestrator] ERROR: feature {feature} disappeared")
+                return False
+            _run_executor(feature)
+        else:
+            # verify_commands or other failures — run fixer
+            print(f"[orchestrator] Code issues — running fixer...")
+            _run_fixer(feature, verify_output)
 
     # Retries exhausted
     update_feature_field(feature.id, status="failed",
                          error=f"Verify failed after {max_retries} attempts")
     return False
+
+
+def _run_executor(feature: Feature) -> None:
+    """Call Claude executor to implement feature steps."""
+    # Reload to get current step status
+    fresh = get_feature(feature.id)
+    if fresh is not None:
+        feature = fresh
+
+    # Determine start step (first undone)
+    start_step = 0
+    for i, s in enumerate(feature.steps):
+        if not s.done:
+            start_step = i
+            break
+    else:
+        # All steps already done — nothing for executor to do
+        print(f"[orchestrator] All steps already done for {feature.id}")
+        return
+
+    done_count = sum(1 for s in feature.steps if s.done)
+    total = len(feature.steps)
+    print(f"[orchestrator] Executor: {feature.id} — step {start_step}/{total} ({done_count} done)")
+
+    briefing = generate_executor_briefing(PROJECT_DIR, feature, start_step)
+    prompt = EXECUTOR_PROMPT.format(
+        briefing=briefing,
+        feature_id=feature.id,
+        start_step=start_step,
+    )
+    system_note = (
+        "You are called by an orchestrator in executor mode. "
+        "Implement the feature steps. Use step.py to record progress. "
+        "Do NOT run verify.py / complete.py / archive.py."
+    )
+
+    result = call_claude(
+        prompt,
+        max_turns=30,
+        system_append=system_note,
+    )
+
+    if result.get("is_error"):
+        err = result.get("error", "unknown error")
+        print(f"[orchestrator] Claude executor error: {err}")
+        update_feature_field(feature.id, error=f"Executor error: {err}")
+        # Don't mark failed — verify loop will assess the situation
+
+
+def _run_fixer(feature: Feature, verify_output: str) -> None:
+    """Call Claude fixer to repair code based on verify errors."""
+    vc_text = "\n".join(f"  {cmd}" for cmd in feature.verify_commands)
+
+    prompt = FIX_PROMPT.format(
+        feature_id=feature.id,
+        feature_title=feature.title,
+        verify_errors=verify_output,
+        verify_commands=vc_text,
+    )
+    system_note = (
+        "You are called by an orchestrator in fix mode. "
+        "Fix the code so verify_commands pass. "
+        "Do NOT run verify.py / complete.py. Do NOT modify verify_commands."
+    )
+
+    result = call_claude(
+        prompt,
+        max_turns=20,
+        system_append=system_note,
+    )
+
+    if result.get("is_error"):
+        print(f"[orchestrator] Claude fixer error: {result.get('error', '')}")
 
 
 # ===================================================================
