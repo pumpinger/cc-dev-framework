@@ -31,6 +31,7 @@
 | `python .cc-dev-framework/verify.py -f <id>` | 跑 4 项门禁检查（**脚本判断**，不是你） |
 | `python .cc-dev-framework/complete.py -f <id> -m "commit msg"` | 完成功能：verify → commit → merge → 标记 completed |
 | `python .cc-dev-framework/archive.py` | 归档已完成功能到 vN.json |
+| `python .cc-dev-framework/seal.py` | 规划完成后锁定 verify_commands（计算 hash） |
 | `bash .cc-dev-framework/init.sh` | 项目环境初始化（安装依赖等） |
 
 ---
@@ -101,7 +102,7 @@ python .cc-dev-framework/complete.py -f <id> -m "feat(<id>): 功能标题"
 ```
 
 `complete.py` 自动执行：
-1. 跑 `verify.py` 门禁检查（4 项：steps_done / steps_evidence / verify_commands / git_branch）
+1. 跑 `verify.py` 门禁检查（5 项：steps_done / steps_evidence / verify_integrity / verify_commands / git_branch）
 2. GATE PASSED → `git add -A && git commit`
 3. 切到 main/master → merge → 删除 feature 分支
 4. 更新 features.json：status=completed + commit_hash
@@ -134,11 +135,11 @@ python .cc-dev-framework/verify.py -f <id>
 4. 如果 `.cc-dev-framework/archive/` 存在，读取归档了解已有功能（避免重复实现）
 5. 分解为 2-8 个独立功能
 6. 每个功能 2-6 个步骤
-7. **每个功能必须有 verify_commands**（至少 1 条可执行命令）
+7. **每个功能必须有 verify_commands**（至少 1 条可执行命令），且必须遵守下方的 verify_commands 质量要求
 8. priority: 1 = 最高优先，按依赖排序
 9. feature id 使用 kebab-case
 10. 写入 `.cc-dev-framework/features.json`
-11. 第一轮迭代时，在 project-setup 阶段填写 `.cc-dev-framework/init.sh`（安装依赖 + 冒烟测试，确保每次新会话能验证项目可运行）
+11. **第一轮迭代的第一个功能必须是 project-setup**：填写 `.cc-dev-framework/init.sh`（安装依赖 + 冒烟测试）。init.sh 必须确保：依赖已安装（npm install / pip install 等）、项目能编译/运行。后续所有 verify_commands 都依赖 init.sh 建立的环境
 
 功能 JSON 结构：
 ```json
@@ -152,8 +153,10 @@ python .cc-dev-framework/verify.py -f <id>
     {"description": "步骤描述", "done": false, "evidence": null}
   ],
   "verify_commands": [
-    "python -c \"from module import func; print('OK')\""
+    "npx tsc --noEmit",
+    "npx jest tests/feature-id.test.tsx"
   ],
+  "verify_commands_hash": null,
   "done_evidence": {
     "verify_results": [],
     "gate_checks": [],
@@ -164,6 +167,53 @@ python .cc-dev-framework/verify.py -f <id>
   "error": null
 }
 ```
+
+### verify_commands — 规划阶段的测试合约
+
+verify_commands 不只是验收工具，而是**规划阶段的测试合约**。在规划时就决定"这个功能怎么证明它对了"，实现时按合约交付代码和测试。
+
+**每个功能的 verify_commands 必须包含两层：**
+
+1. **代码检查**（编译/类型检查） — 证明代码在语法和类型层面是正确的
+2. **测试执行**（单元测试或集成测试） — 证明功能的行为是正确的
+
+**规划阶段写 verify_commands 时，必须指明要验证的具体测试文件：**
+
+```json
+// Node/TS 项目
+"verify_commands": [
+  "npx tsc --noEmit",
+  "npx jest tests/AddTask.test.tsx"
+]
+
+// Java 项目
+"verify_commands": [
+  "./gradlew compileJava",
+  "./gradlew test --tests com.example.AddTaskTest"
+]
+
+// Python 项目
+"verify_commands": [
+  "python -m py_compile src/todo/add.py",
+  "pytest tests/test_add.py -x"
+]
+```
+
+这样做的效果：执行者看到 `npx jest tests/AddTask.test.tsx`，就知道必须编写 `tests/AddTask.test.tsx`，而且测试必须通过。**测试文件是交付物，不是可选项。**
+
+### verify_commands 锁定（seal）
+
+规划完成后，必须运行 `python .cc-dev-framework/seal.py` 锁定 verify_commands。
+
+seal.py 计算每个 feature 的 verify_commands 的 SHA-256 hash，存入 `verify_commands_hash` 字段。之后 verify.py 门禁会检查 hash 是否一致——如果执行者修改了 verify_commands，hash 不匹配，门禁直接 FAIL。
+
+**规划完成的标准流程：**
+1. 写好 features.json（含两层 verify_commands）
+2. 运行 `python .cc-dev-framework/seal.py`
+3. 确认所有 feature 都被 SEAL
+4. 然后才开始实现
+
+**原则：verify_commands 在规划时定死并锁定。执行阶段不能修改，只能达标。**
 
 ### type 字段
 
@@ -244,7 +294,35 @@ python .cc-dev-framework/archive.py
 
 ---
 
-## 11. 禁止事项
+## 11. 环境问题处理
+
+当 verify_commands 依赖的工具无法运行时（npm install 失败、gradle 报错、依赖缺失等）：
+
+1. **停下来。** 不要继续写代码
+2. **报告阻塞。** 明确告诉用户：哪个命令失败了、错误信息是什么
+3. **修复环境。** 与用户一起解决（配置 npm token、修复路径、安装依赖等）
+4. **环境修好后再继续**
+
+**绝对禁止：把"环境跑不了"当作降级 verify_commands 的理由。**
+- npm install 失败 → 不能把 `npx tsc --noEmit` 换成 `test -f xxx.tsx`
+- gradle 路径有问题 → 不能把 `./gradlew compileJava` 换成 `ls build/`
+- 任何时候把编译/测试验证降级为文件存在性检查，都是错误的
+
+verify_commands 写在规划阶段，是承诺要达到的验证标准。实现阶段遇到困难不能降低标准，只能解决困难。
+
+---
+
+## 12. 用户上下文
+
+用户在对话中提供的项目信息（部署方式、CI/CD、技术约束等）是重要上下文：
+
+- **记住并遵守用户说的约束。** 如果用户说"代码推送即自动部署"，不要问部署相关的问题
+- **用户上下文不能替代本地验证。** CI 在 push 之后运行，verify_commands 在 commit 之前运行——它们是不同的检查点。即使有 CI，本地 verify_commands 仍然必须有意义
+- **有疑问时回看对话历史。** 不要忽略用户之前说过的信息
+
+---
+
+## 13. 禁止事项
 
 - 禁止跳过 verify 直接标记 completed
 - 禁止自己判定"验证通过"（只有脚本能判）
@@ -254,3 +332,5 @@ python .cc-dev-framework/archive.py
 - 禁止在 main 分支上直接开发
 - 禁止 GATE FAILED 时 merge
 - 禁止手动修改 done_evidence（由脚本写入）
+- **禁止在实现阶段修改 verify_commands**（已被 seal.py hash 锁定，verify.py 会检测篡改）
+- **禁止忽略用户在对话中提供的项目信息**

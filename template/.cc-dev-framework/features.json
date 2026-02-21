@@ -12,8 +12,9 @@
         {"description": "步骤描述", "done": false, "evidence": null}
       ],
       "verify_commands": [
-        "python -c \"print('verify ok')\""
+        "echo '请替换为真实验证命令，例如: npx tsc --noEmit / npm test / pytest' && exit 1"
       ],
+      "verify_commands_hash": null,
       "done_evidence": {
         "verify_results": [],
         "gate_checks": [],
