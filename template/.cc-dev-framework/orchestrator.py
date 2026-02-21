@@ -202,8 +202,9 @@ def run_init() -> bool:
         return True
 
     print("[orchestrator] Running init.sh...")
+    # Use as_posix() so bash gets forward-slash path on Windows
     proc = subprocess.run(
-        ["bash", str(init_script)],
+        ["bash", init_script.as_posix()],
         cwd=str(PROJECT_DIR),
         encoding="utf-8", errors="replace",
     )
@@ -211,6 +212,41 @@ def run_init() -> bool:
         print("[orchestrator] ERROR: init.sh failed")
         return False
     print("[orchestrator] init.sh OK")
+    return True
+
+
+def _ensure_git_repo() -> bool:
+    """Initialize git repo if not already one. Returns True on success."""
+    proc = subprocess.run(
+        ["git", "rev-parse", "--git-dir"],
+        cwd=str(PROJECT_DIR),
+        capture_output=True, encoding="utf-8", errors="replace",
+    )
+    if proc.returncode == 0:
+        return True  # Already a git repo
+
+    print("[orchestrator] No git repo found. Initializing...")
+    proc = subprocess.run(
+        ["git", "init"],
+        cwd=str(PROJECT_DIR),
+        encoding="utf-8", errors="replace",
+    )
+    if proc.returncode != 0:
+        print("[orchestrator] ERROR: git init failed")
+        return False
+
+    # Initial commit so branches can be created
+    proc = subprocess.run(
+        ["git", "add", "-A"],
+        cwd=str(PROJECT_DIR),
+        capture_output=True, encoding="utf-8", errors="replace",
+    )
+    proc = subprocess.run(
+        ["git", "commit", "-m", "chore: initial commit", "--allow-empty"],
+        cwd=str(PROJECT_DIR),
+        capture_output=True, encoding="utf-8", errors="replace",
+    )
+    print("[orchestrator] Git repo initialized.")
     return True
 
 
@@ -430,6 +466,10 @@ def main() -> None:
     # PHASE 1: INIT
     # ---------------------------------------------------------------
     print("[PHASE 1] Initializing...")
+    if not _ensure_git_repo():
+        print("[orchestrator] ERROR: Could not initialize git repo. Exiting.")
+        sys.exit(1)
+
     if not run_init():
         # init.sh failed — check if we even have features yet.
         # If no features planned, init.sh is expected to fail (template state).
