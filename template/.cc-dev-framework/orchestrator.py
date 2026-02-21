@@ -18,21 +18,19 @@ Options:
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import os
 import re
 import signal
 import subprocess
 import sys
-import textwrap
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
 
-# Windows encoding fix
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+# Windows encoding fix — use reconfigure to avoid double-wrap issues
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # Imports from same directory
 sys.path.insert(0, str(Path(__file__).parent))
