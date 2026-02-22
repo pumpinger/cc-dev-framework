@@ -1,13 +1,13 @@
 # Task: 中文化 + 日志系统
 
 ## Plan
-- [ ] Step 1: 新建 `core/log.py` — logging 模块
-- [ ] Step 2: orchestrator.py 全面改造（日志 + 中文 + stream tee）
-- [ ] Step 3: 其余 7 个脚本中文化
-- [ ] Step 4: 更新 CLAUDE.md + README.md ← CURRENT
+- [x] Step 1: 新建 `core/log.py` — logging 模块
+- [x] Step 2: orchestrator.py 全面改造（日志 + 中文 + stream tee）
+- [ ] Step 3: 其余 7 个脚本中文化 ← CURRENT
+- [ ] Step 4: 更新 CLAUDE.md + README.md
 
 ## Current State
-Starting fresh.
+Step 2 complete. orchestrator.py fully rewritten with Chinese output, logging, stream tee.
 
 ## Key Decisions
 - 日志文件: `.cc-dev-framework/orchestrator.log`, mode="w" 每次清空
