@@ -101,6 +101,9 @@ def main():
         _git("stash", "drop")
         sys.exit(1)
 
+    # Remove untracked runtime artifacts (e.g. e2e_test.db) that would block merge
+    _git("clean", "-fd")
+
     rc, out = _git("merge", branch, "--no-edit")
     if rc != 0:
         print(f"git merge 失败: {out}")
