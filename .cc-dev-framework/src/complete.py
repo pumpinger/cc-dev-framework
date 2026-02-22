@@ -70,8 +70,11 @@ def main():
 
     rc, out = _git("commit", "-m", args.message)
     if rc != 0:
-        print(f"git commit 失败: {out}")
-        sys.exit(1)
+        if "nothing to commit" in out:
+            print("没有新的变更需要提交，使用最新 commit。")
+        else:
+            print(f"git commit 失败: {out}")
+            sys.exit(1)
 
     # Get commit hash
     rc, hash_out = _git("rev-parse", "--short", "HEAD")

@@ -7,8 +7,8 @@ Usage:
 
 Options:
   --auto-approve     跳过规划审批（默认：询问用户）
-  --max-retries N    每个 feature 验证失败后的最大重试次数（默认 3）
-  --max-e2e-retries N  E2E 测试最大重试次数（默认 2）
+  --max-retries N    验证失败后的最大修复重试次数（默认 3，即首次验证 + 3 次修复）
+  --max-e2e-retries N  E2E 失败后的最大修复重试次数（默认 2，即首次 E2E + 2 次修复）
   --goal "text"      覆盖目标（否则从 features.json 或交互输入获取）
   --feature ID       只处理指定 feature
   --dry-run          只展示执行计划，不实际调用 Claude
@@ -549,9 +549,9 @@ def main() -> None:
     parser.add_argument("--auto-approve", action="store_true",
                         help="跳过规划审批")
     parser.add_argument("--max-retries", type=int, default=3,
-                        help="每个 feature 验证失败后的最大重试次数（默认 3）")
+                        help="验证失败后的最大修复重试次数（默认 3，即首次验证 + 3 次修复）")
     parser.add_argument("--max-e2e-retries", type=int, default=2,
-                        help="E2E 测试最大重试次数（默认 2）")
+                        help="E2E 失败后的最大修复重试次数（默认 2，即首次 E2E + 2 次修复）")
     parser.add_argument("--goal", type=str, default=None,
                         help="覆盖项目目标")
     parser.add_argument("--feature", type=str, default=None,
@@ -622,7 +622,17 @@ def main() -> None:
             done = sum(1 for s in resume_feature.steps if s.done)
             print(f"  [dry-run] 将恢复 {resume_feature.id}，从步骤 {done} 开始")
             return
-        _execute_feature(resume_feature, args.max_retries, args.max_e2e_retries)
+        success = _execute_feature(resume_feature, args.max_retries, args.max_e2e_retries)
+        if not success:
+            msg = f"Feature {resume_feature.id} 恢复执行失败，停止。"
+            print(f"[main] {msg}")
+            logger.error(msg)
+            _save_progress(
+                f"失败: {resume_feature.id}",
+                [f.id for f in all_features if f.status == "completed"],
+                in_progress=resume_feature.id,
+            )
+            sys.exit(1)
         # After resuming, fall through to process remaining features
         raw = load_features()
         all_features = [Feature.from_dict(fd) for fd in raw.get("features", [])]
@@ -837,12 +847,14 @@ def main() -> None:
         # Reload
         raw = load_features()
         all_features = [Feature.from_dict(fd) for fd in raw.get("features", [])]
-        pending = [f for f in all_features if f.status == "pending"]
 
     # ---------------------------------------------------------------
     # 阶段 5: 执行
     # ---------------------------------------------------------------
-    if not pending and not resume_feature:
+    # Collect actionable features: pending + failed
+    actionable = [f for f in all_features if f.status in ("pending", "failed")]
+
+    if not actionable and not resume_feature:
         completed_count = sum(1 for f in all_features if f.status == "completed")
         if completed_count == len(all_features) and all_features:
             print()
@@ -854,32 +866,36 @@ def main() -> None:
             logger.info(msg)
         # Jump to archive
     else:
+        pending_count = sum(1 for f in actionable if f.status == "pending")
+        failed_count = sum(1 for f in actionable if f.status == "failed")
         print()
-        msg = f"正在执行 {len(pending)} 个待处理 feature..."
+        msg = f"正在执行 {len(actionable)} 个 feature（{pending_count} 待处理, {failed_count} 重试）..."
         print(f"[阶段 5] {msg}")
-        logger.info("=== 阶段 5: 执行 (%d 个 feature) ===", len(pending))
+        logger.info("=== 阶段 5: 执行 (%d 个 feature, %d pending, %d failed) ===",
+                     len(actionable), pending_count, failed_count)
 
         # Sort by priority
-        pending.sort(key=lambda f: f.priority)
+        actionable.sort(key=lambda f: f.priority)
 
         if args.feature:
-            pending = [f for f in pending if f.id == args.feature]
-            if not pending:
-                msg = f"Feature '{args.feature}' 未找到或非 pending 状态。"
+            actionable = [f for f in actionable if f.id == args.feature]
+            if not actionable:
+                msg = f"Feature '{args.feature}' 未找到或非待执行状态。"
                 print(f"[main] {msg}")
                 logger.error(msg)
                 sys.exit(1)
 
         if args.dry_run:
-            for f in pending:
-                print(f"  [dry-run] 将执行: #{f.priority} {f.id} ({f.title})")
+            for f in actionable:
+                tag = "[重试]" if f.status == "failed" else ""
+                print(f"  [dry-run] 将执行: #{f.priority} {f.id} ({f.title}) {tag}")
                 for i, s in enumerate(f.steps):
                     print(f"    {i}: {s.description}")
                 print(f"    验证命令: {', '.join(f.verify_commands)}")
             print("  [dry-run] 每个 feature 执行后将进行 E2E 测试")
             return
 
-        for feature in pending:
+        for feature in actionable:
             success = _execute_feature(feature, args.max_retries, args.max_e2e_retries)
             if not success:
                 msg = f"Feature {feature.id} 执行失败，停止执行。"
@@ -942,8 +958,8 @@ def _execute_feature(feature: Feature, max_retries: int, max_e2e_retries: int) -
     print(f"{'=' * 60}")
     logger.info("开始执行 feature: %s (%s)", feature.id, feature.title)
 
-    # Start feature (create branch + set in_progress) if still pending
-    if feature.status == "pending":
+    # Start feature (create branch + set in_progress) if pending or failed
+    if feature.status in ("pending", "failed"):
         rc = run_script("src/start.py", "-f", feature.id)
         if rc != 0:
             msg = f"错误: start.py 对 {feature.id} 执行失败"
@@ -962,38 +978,28 @@ def _execute_feature(feature: Feature, max_retries: int, max_e2e_retries: int) -
         return False
 
     # --- E2E testing loop ---
-    for e2e_attempt in range(1, max_e2e_retries + 1):
-        msg = f"E2E 测试尝试 {e2e_attempt}/{max_e2e_retries}: {feature.id}"
+    # Semantics: first E2E test + up to max_e2e_retries fix-then-retest cycles.
+    # So max_e2e_retries=2 means: 1 initial E2E + 2 fix attempts = 3 E2E tests total.
+
+    # Initial E2E test
+    msg = f"E2E 测试: {feature.id}"
+    print(f"\n[main] {msg}")
+    logger.info(msg)
+
+    e2e_result, e2e_detail, e2e_output = _run_e2e_tester(feature)
+
+    if e2e_result in ("passed", "skipped"):
+        return _complete_feature(feature, e2e_result, e2e_detail)
+
+    msg = f"E2E 测试失败: {e2e_detail}"
+    print(f"\n[main] {msg}")
+    logger.error(msg)
+
+    # Fix + re-E2E retries
+    for retry in range(max_e2e_retries):
+        msg = f"E2E 修复重试 {retry + 1}/{max_e2e_retries}: {feature.id}"
         print(f"\n[main] {msg}")
         logger.info(msg)
-
-        e2e_result, e2e_detail, e2e_output = _run_e2e_tester(feature)
-
-        if e2e_result in ("passed", "skipped"):
-            label = "通过" if e2e_result == "passed" else "无需"
-            detail_msg = f"（{e2e_detail}）" if e2e_detail else ""
-            msg = f"E2E 测试{label}: {feature.id}{detail_msg}"
-            print(f"\n[main] {msg}")
-            logger.info(msg)
-            # Complete the feature
-            commit_msg = f"feat({feature.id}): {feature.title}"
-            rc = run_script("src/complete.py", "-f", feature.id, "-m", commit_msg, "--skip-verify")
-            if rc != 0:
-                msg = f"警告: complete.py 对 {feature.id} 执行失败"
-                print(f"[main] {msg}")
-                logger.error(msg)
-                update_feature_field(feature.id, error="complete.py 执行失败")
-                return False
-            logger.info("feature %s 完成", feature.id)
-            return True
-
-        # E2E failed — run fixer directly
-        msg = f"E2E 测试失败: {e2e_detail}"
-        print(f"\n[main] {msg}")
-        logger.error(msg)
-
-        if e2e_attempt >= max_e2e_retries:
-            break
 
         # Reload feature
         feature = get_feature(feature.id)
@@ -1011,33 +1017,69 @@ def _execute_feature(feature: Feature, max_retries: int, max_e2e_retries: int) -
                                  error="E2E fix 后验证失败")
             return False
 
+        # Re-run E2E test
+        e2e_result, e2e_detail, e2e_output = _run_e2e_tester(feature)
+
+        if e2e_result in ("passed", "skipped"):
+            return _complete_feature(feature, e2e_result, e2e_detail)
+
+        msg = f"E2E 测试失败: {e2e_detail}"
+        print(f"\n[main] {msg}")
+        logger.error(msg)
+
     # E2E retries exhausted
-    msg = f"E2E 测试在 {max_e2e_retries} 次重试后仍失败"
+    msg = f"E2E 测试在 {max_e2e_retries} 次修复重试后仍失败"
     print(f"[main] {msg}")
     logger.error(msg)
     update_feature_field(feature.id, status="failed",
-                         error=f"E2E 测试在 {max_e2e_retries} 次重试后仍失败")
+                         error=f"E2E 测试在 {max_e2e_retries} 次修复重试后仍失败")
     return False
 
 
+def _complete_feature(feature: Feature, e2e_result: str, e2e_detail: str) -> bool:
+    """Complete a feature after E2E passes/skips. Returns True on success."""
+    label = "通过" if e2e_result == "passed" else "无需"
+    detail_msg = f"（{e2e_detail}）" if e2e_detail else ""
+    msg = f"E2E 测试{label}: {feature.id}{detail_msg}"
+    print(f"\n[main] {msg}")
+    logger.info(msg)
+    commit_msg = f"feat({feature.id}): {feature.title}"
+    rc = run_script("src/complete.py", "-f", feature.id, "-m", commit_msg, "--skip-verify")
+    if rc != 0:
+        msg = f"警告: complete.py 对 {feature.id} 执行失败"
+        print(f"[main] {msg}")
+        logger.error(msg)
+        update_feature_field(feature.id, error="complete.py 执行失败")
+        return False
+    logger.info("feature %s 完成", feature.id)
+    return True
+
+
 def _run_verify_loop(feature: Feature, max_retries: int) -> bool:
-    """Run verify + fix loop. Returns True if verify passes."""
-    for attempt in range(1, max_retries + 1):
-        msg = f"验证尝试 {attempt}/{max_retries}: {feature.id}"
+    """Run verify + fix loop. Returns True if verify passes.
+
+    Semantics: first verification + up to max_retries fix-then-reverify cycles.
+    So max_retries=3 means: 1 initial verify + 3 fix attempts = 4 verifications total.
+    """
+    # --- Initial verification ---
+    msg = f"验证: {feature.id}"
+    print(f"\n[main] {msg}")
+    logger.info(msg)
+
+    rc, verify_output = run_script_capture("src/verify.py", "-f", feature.id)
+    print(verify_output)
+
+    if rc == 0:
+        msg = f"验证通过: {feature.id}"
         print(f"\n[main] {msg}")
         logger.info(msg)
+        return True
 
-        rc, verify_output = run_script_capture("src/verify.py", "-f", feature.id)
-        print(verify_output)
-
-        if rc == 0:
-            msg = f"验证通过: {feature.id}"
-            print(f"\n[main] {msg}")
-            logger.info(msg)
-            return True
-
-        if attempt >= max_retries:
-            break
+    # --- Fix + re-verify retries ---
+    for retry in range(max_retries):
+        msg = f"修复重试 {retry + 1}/{max_retries}: {feature.id}"
+        print(f"\n[main] {msg}")
+        logger.info(msg)
 
         # Reload feature
         fresh = get_feature(feature.id)
@@ -1052,6 +1094,16 @@ def _run_verify_loop(feature: Feature, max_retries: int) -> bool:
             _run_executor(feature)
         else:
             _run_fixer(feature, verify_output)
+
+        # Re-verify
+        rc, verify_output = run_script_capture("src/verify.py", "-f", feature.id)
+        print(verify_output)
+
+        if rc == 0:
+            msg = f"验证通过: {feature.id}"
+            print(f"\n[main] {msg}")
+            logger.info(msg)
+            return True
 
     return False
 
