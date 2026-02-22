@@ -1,9 +1,9 @@
-"""Orchestrator — Python 编排工作流，驱动 cc-dev-framework。
+"""cc-dev-framework 主入口 — Python 编排工作流。
 
 以 Python 控制流为主，Claude Code -p 做 AI 工作，脚本做机械验证。
 
 Usage:
-  python .cc-dev-framework/orchestrator.py [options]
+  python .cc-dev-framework/main.py [options]
 
 Options:
   --auto-approve     跳过规划审批（默认：询问用户）
@@ -55,7 +55,7 @@ PROGRESS_PATH = FRAMEWORK_DIR / "progress.json"
 # Claude command timeout (seconds)
 CLAUDE_TIMEOUT = 600  # 10 minutes
 
-logger = get_logger("orchestrator")
+logger = get_logger("main")
 
 
 # ===================================================================
@@ -69,7 +69,7 @@ def _handle_sigint(signum, frame):
     global _interrupted
     _interrupted = True
     msg = "被用户中断，正在保存状态..."
-    print(f"\n[orchestrator] {msg}")
+    print(f"\n[main] {msg}")
     logger.warning(msg)
     _save_progress("被用户中断", [])
     sys.exit(130)
@@ -122,7 +122,7 @@ def call_claude(
 
     mode_label = "stream" if stream else "json"
     msg = f"正在调用 Claude (max_turns={max_turns}, {mode_label})..."
-    print(f"[orchestrator] {msg}")
+    print(f"[main] {msg}")
     logger.info(msg)
 
     try:
@@ -250,7 +250,7 @@ def run_script(name: str, *args: str) -> int:
     script = FRAMEWORK_DIR / name
     cmd = [sys.executable, str(script)] + list(args)
     msg = f"运行脚本: {name} {' '.join(args)}"
-    print(f"[orchestrator] {msg}")
+    print(f"[main] {msg}")
     logger.info(msg)
     proc = subprocess.run(
         cmd, cwd=str(PROJECT_DIR),
@@ -272,7 +272,7 @@ def run_script_capture(name: str, *args: str) -> tuple[int, str]:
     script = FRAMEWORK_DIR / name
     cmd = [sys.executable, str(script)] + list(args)
     msg = f"运行脚本: {name} {' '.join(args)}"
-    print(f"[orchestrator] {msg}")
+    print(f"[main] {msg}")
     logger.info(msg)
     proc = subprocess.run(
         cmd, cwd=str(PROJECT_DIR),
@@ -292,12 +292,12 @@ def run_init() -> bool:
     init_script = FRAMEWORK_DIR / "init.sh"
     if not init_script.exists():
         msg = "警告: 未找到 init.sh，跳过"
-        print(f"[orchestrator] {msg}")
+        print(f"[main] {msg}")
         logger.warning(msg)
         return True
 
     msg = "正在运行 init.sh..."
-    print(f"[orchestrator] {msg}")
+    print(f"[main] {msg}")
     logger.info(msg)
     # Use as_posix() so bash gets forward-slash path on Windows
     proc = subprocess.run(
@@ -312,11 +312,11 @@ def run_init() -> bool:
             logger.info("[init.sh] %s", line)
     if proc.returncode != 0:
         msg = "错误: init.sh 执行失败"
-        print(f"[orchestrator] {msg}")
+        print(f"[main] {msg}")
         logger.error(msg)
         return False
     msg = "init.sh 执行成功"
-    print(f"[orchestrator] {msg}")
+    print(f"[main] {msg}")
     logger.info(msg)
     return True
 
@@ -332,7 +332,7 @@ def _ensure_git_repo() -> bool:
         return True  # Already a git repo
 
     msg = "未检测到 git 仓库，正在初始化..."
-    print(f"[orchestrator] {msg}")
+    print(f"[main] {msg}")
     logger.info(msg)
     proc = subprocess.run(
         ["git", "init"],
@@ -341,7 +341,7 @@ def _ensure_git_repo() -> bool:
     )
     if proc.returncode != 0:
         msg = "错误: git init 失败"
-        print(f"[orchestrator] {msg}")
+        print(f"[main] {msg}")
         logger.error(msg)
         return False
 
@@ -357,7 +357,7 @@ def _ensure_git_repo() -> bool:
         capture_output=True, encoding="utf-8", errors="replace",
     )
     msg = "git 仓库已初始化。"
-    print(f"[orchestrator] {msg}")
+    print(f"[main] {msg}")
     logger.info(msg)
     return True
 
@@ -445,7 +445,7 @@ def prompt_user_goal() -> str:
         sys.exit(130)
     if not goal:
         msg = "未提供目标，退出。"
-        print(f"[orchestrator] {msg}")
+        print(f"[main] {msg}")
         logger.warning(msg)
         sys.exit(1)
     logger.info("用户输入目标: %s", goal)
@@ -561,12 +561,12 @@ def _extract_json_from_output(text: str) -> dict | None:
 
 
 # ===================================================================
-# Main orchestrator flow
+# Main flow
 # ===================================================================
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="cc-dev-framework orchestrator — 驱动 Claude Code 进行规划与执行"
+        description="cc-dev-framework — 驱动 Claude Code 进行规划与执行"
     )
     parser.add_argument("--auto-approve", action="store_true",
                         help="跳过规划审批")
@@ -581,7 +581,7 @@ def main() -> None:
     args = parser.parse_args()
 
     setup_logging()
-    logger.info("orchestrator 启动, args=%s", vars(args))
+    logger.info("启动, args=%s", vars(args))
 
     print()
     print("=" * 60)
@@ -596,7 +596,7 @@ def main() -> None:
     logger.info("=== 阶段 1: 初始化 ===")
     if not _ensure_git_repo():
         msg = "错误: 无法初始化 git 仓库，退出。"
-        print(f"[orchestrator] {msg}")
+        print(f"[main] {msg}")
         logger.error(msg)
         sys.exit(1)
 
@@ -610,12 +610,12 @@ def main() -> None:
         )
         if has_real_features:
             msg = "错误: init.sh 执行失败且已有 feature 规划。请先修复 init.sh。"
-            print(f"[orchestrator] {msg}")
+            print(f"[main] {msg}")
             logger.error(msg)
             sys.exit(1)
         else:
             msg = "init.sh 执行失败但尚无 feature 规划，继续进入规划阶段。"
-            print(f"[orchestrator] {msg}")
+            print(f"[main] {msg}")
             logger.info(msg)
 
     # ---------------------------------------------------------------
@@ -635,7 +635,7 @@ def main() -> None:
 
     if resume_feature:
         msg = f"恢复执行: {resume_feature.id} ({resume_feature.title})"
-        print(f"[orchestrator] {msg}")
+        print(f"[main] {msg}")
         logger.info(msg)
         # Skip to execution phase for this feature
         if args.dry_run:
@@ -681,7 +681,7 @@ def main() -> None:
         # Call Claude for planning
         prompt = PLANNER_PROMPT.format(briefing=briefing, goal=goal)
         system_note = (
-            "你由 orchestrator 调用。只输出一个 JSON 代码块。"
+            "你由编排器 调用。只输出一个 JSON 代码块。"
             "不要运行任何脚本，不要创建文件，只输出规划 JSON。"
         )
         result = call_claude(
@@ -693,7 +693,7 @@ def main() -> None:
 
         if result.get("is_error"):
             msg = f"错误: Claude 规划失败: {result.get('error', result.get('result', ''))}"
-            print(f"[orchestrator] {msg}")
+            print(f"[main] {msg}")
             logger.error(msg)
             sys.exit(1)
 
@@ -701,9 +701,9 @@ def main() -> None:
         plan_data = _extract_json_from_output(result["result"])
         if plan_data is None:
             msg = "错误: 无法从 Claude 输出中提取规划 JSON。"
-            print(f"[orchestrator] {msg}")
+            print(f"[main] {msg}")
             logger.error(msg)
-            print("[orchestrator] 原始输出（前 2000 字符）:")
+            print("[main] 原始输出（前 2000 字符）:")
             print(result["result"][:2000])
             logger.error("原始输出: %s", result["result"][:2000])
             sys.exit(1)
@@ -715,7 +715,7 @@ def main() -> None:
 
         if errors:
             msg = f"规划验证失败（{len(errors)} 个错误）:"
-            print(f"[orchestrator] {msg}")
+            print(f"[main] {msg}")
             logger.error(msg)
             for e in errors:
                 print(f"  [FAIL] {e}")
@@ -723,7 +723,7 @@ def main() -> None:
 
             # Give Claude one retry
             msg = "正在要求 Claude 修复规划..."
-            print(f"[orchestrator] {msg}")
+            print(f"[main] {msg}")
             logger.info(msg)
             fix_note = (
                 "The plan you produced has validation errors:\n"
@@ -739,21 +739,21 @@ def main() -> None:
 
             if result.get("is_error"):
                 msg = "错误: Claude 重试失败。"
-                print(f"[orchestrator] {msg}")
+                print(f"[main] {msg}")
                 logger.error(msg)
                 sys.exit(1)
 
             plan_data = _extract_json_from_output(result["result"])
             if plan_data is None:
                 msg = "错误: 重试后仍无法提取规划 JSON。"
-                print(f"[orchestrator] {msg}")
+                print(f"[main] {msg}")
                 logger.error(msg)
                 sys.exit(1)
 
             errors = validate_plan(plan_data, is_first_iteration=is_first)
             if errors:
                 msg = "重试后规划仍不合格:"
-                print(f"[orchestrator] {msg}")
+                print(f"[main] {msg}")
                 logger.error(msg)
                 for e in errors:
                     print(f"  [FAIL] {e}")
@@ -761,21 +761,21 @@ def main() -> None:
                 sys.exit(1)
 
         msg = f"规划验证通过: {len(plan_data.get('features', []))} 个 feature"
-        print(f"[orchestrator] {msg}")
+        print(f"[main] {msg}")
         logger.info(msg)
 
         # User approval
         if not args.auto_approve:
             if not prompt_user_approval(plan_data):
                 msg = "用户拒绝了规划。"
-                print(f"[orchestrator] {msg}")
+                print(f"[main] {msg}")
                 logger.info(msg)
                 sys.exit(0)
 
         # Save plan
         save_features(plan_data)
         msg = "规划已保存。"
-        print(f"[orchestrator] {msg}")
+        print(f"[main] {msg}")
         logger.info(msg)
 
         # Reload
@@ -794,7 +794,7 @@ def main() -> None:
             logger.info("所有 feature 已完成")
         else:
             msg = "没有待执行的 feature。"
-            print(f"[orchestrator] {msg}")
+            print(f"[main] {msg}")
             logger.info(msg)
         # Jump to archive
     else:
@@ -810,7 +810,7 @@ def main() -> None:
             pending = [f for f in pending if f.id == args.feature]
             if not pending:
                 msg = f"Feature '{args.feature}' 未找到或非 pending 状态。"
-                print(f"[orchestrator] {msg}")
+                print(f"[main] {msg}")
                 logger.error(msg)
                 sys.exit(1)
 
@@ -826,7 +826,7 @@ def main() -> None:
             success = _execute_feature(feature, args.max_retries)
             if not success:
                 msg = f"Feature {feature.id} 在 {args.max_retries} 次重试后仍失败，停止执行。"
-                print(f"[orchestrator] {msg}")
+                print(f"[main] {msg}")
                 logger.error(msg)
                 _save_progress(
                     f"失败: {feature.id}",
@@ -858,7 +858,7 @@ def main() -> None:
         completed_ids,
     )
     msg = "执行完毕。"
-    print(f"[orchestrator] {msg}")
+    print(f"[main] {msg}")
     logger.info(msg)
 
 
@@ -886,7 +886,7 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
         rc = run_script("core/start.py", "-f", feature.id)
         if rc != 0:
             msg = f"错误: start.py 对 {feature.id} 执行失败"
-            print(f"[orchestrator] {msg}")
+            print(f"[main] {msg}")
             logger.error(msg)
             update_feature_field(feature.id, status="failed", error="start.py 执行失败")
             return False
@@ -897,7 +897,7 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
     # Verify + retry loop
     for attempt in range(1, max_retries + 1):
         msg = f"验证尝试 {attempt}/{max_retries}: {feature.id}"
-        print(f"\n[orchestrator] {msg}")
+        print(f"\n[main] {msg}")
         logger.info(msg)
 
         rc, verify_output = run_script_capture("roles/verify.py", "-f", feature.id)
@@ -906,13 +906,13 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
         if rc == 0:
             # GATE PASSED — complete the feature
             msg = f"验证通过: {feature.id}"
-            print(f"\n[orchestrator] {msg}")
+            print(f"\n[main] {msg}")
             logger.info(msg)
             commit_msg = f"feat({feature.id}): {feature.title}"
             rc = run_script("core/complete.py", "-f", feature.id, "-m", commit_msg)
             if rc != 0:
                 msg = f"警告: complete.py 对 {feature.id} 执行失败"
-                print(f"[orchestrator] {msg}")
+                print(f"[main] {msg}")
                 logger.error(msg)
                 update_feature_field(feature.id, error="complete.py 执行失败")
                 return False
@@ -922,7 +922,7 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
         # GATE FAILED — analyse which gates failed
         errors = extract_verify_errors(verify_output)
         msg = f"验证失败: {errors['summary']}"
-        print(f"[orchestrator] {msg}")
+        print(f"[main] {msg}")
         logger.error(msg)
         for g in errors["failed_gates"]:
             print(f"  [FAIL] {g}")
@@ -938,20 +938,20 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
         if steps_incomplete:
             # Steps not done — re-run executor to continue from where it left off
             msg = "步骤未完成 — 重新运行 Executor..."
-            print(f"[orchestrator] {msg}")
+            print(f"[main] {msg}")
             logger.info(msg)
             # Reload feature to get fresh step status
             feature = get_feature(feature.id)
             if feature is None:
                 msg = f"错误: feature {feature} 已消失"
-                print(f"[orchestrator] {msg}")
+                print(f"[main] {msg}")
                 logger.error(msg)
                 return False
             _run_executor(feature)
         else:
             # verify_commands or other failures — run fixer
             msg = "代码问题 — 运行 Fixer..."
-            print(f"[orchestrator] {msg}")
+            print(f"[main] {msg}")
             logger.info(msg)
             _run_fixer(feature, verify_output)
 
@@ -979,14 +979,14 @@ def _run_executor(feature: Feature) -> None:
     else:
         # All steps already done — nothing for executor to do
         msg = f"{feature.id} 所有步骤已完成"
-        print(f"[orchestrator] {msg}")
+        print(f"[main] {msg}")
         logger.info(msg)
         return
 
     done_count = sum(1 for s in feature.steps if s.done)
     total = len(feature.steps)
     msg = f"Executor: {feature.id} — 步骤 {start_step}/{total}（已完成 {done_count}）"
-    print(f"[orchestrator] {msg}")
+    print(f"[main] {msg}")
     logger.info(msg)
 
     briefing = generate_executor_briefing(PROJECT_DIR, feature, start_step)
@@ -996,7 +996,7 @@ def _run_executor(feature: Feature) -> None:
         start_step=start_step,
     )
     system_note = (
-        "你由 orchestrator 以 executor 模式调用。"
+        "你由编排器 以 executor 模式调用。"
         "按步骤实现功能，用 step.py 记录进度。"
         "不要运行 verify.py / complete.py / archive.py。"
     )
@@ -1010,7 +1010,7 @@ def _run_executor(feature: Feature) -> None:
 
     if result.get("is_error"):
         msg = f"Claude Executor 返回了非零退出码"
-        print(f"[orchestrator] {msg}")
+        print(f"[main] {msg}")
         logger.error(msg)
         update_feature_field(feature.id, error="Executor 出错")
         # Don't mark failed — verify loop will assess the situation
@@ -1027,7 +1027,7 @@ def _run_fixer(feature: Feature, verify_output: str) -> None:
         verify_commands=vc_text,
     )
     system_note = (
-        "你由 orchestrator 以 fix 模式调用。"
+        "你由编排器 以 fix 模式调用。"
         "修复代码使 verify_commands 全部通过。"
         "不要运行 verify.py / complete.py，不要修改 verify_commands。"
     )
@@ -1042,7 +1042,7 @@ def _run_fixer(feature: Feature, verify_output: str) -> None:
 
     if result.get("is_error"):
         msg = "Claude Fixer 返回了非零退出码"
-        print(f"[orchestrator] {msg}")
+        print(f"[main] {msg}")
         logger.error(msg)
 
 

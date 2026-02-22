@@ -3,7 +3,7 @@
 PLANNER_PROMPT = """\
 你是 **Planner**。你的任务是分析项目并生成 features.json 规划。
 
-## 上下文（由 orchestrator 注入）
+## 上下文（由编排器注入）
 {briefing}
 
 ## 目标

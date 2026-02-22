@@ -28,7 +28,7 @@ cp -r /path/to/cc-dev-framework/.cc-dev-framework .
 ### 2. 启动
 
 ```bash
-python .cc-dev-framework/orchestrator.py --goal "用 FastAPI 写一个 TODO API，支持增删改查"
+python .cc-dev-framework/main.py --goal "用 FastAPI 写一个 TODO API，支持增删改查"
 ```
 
 框架会自动：
@@ -48,13 +48,13 @@ python .cc-dev-framework/status.py
 中途中断了？再跑一次就行，框架会自动检测 in_progress 的 feature 并恢复：
 
 ```bash
-python .cc-dev-framework/orchestrator.py
+python .cc-dev-framework/main.py
 ```
 
 ## 命令参数
 
 ```
-python .cc-dev-framework/orchestrator.py [options]
+python .cc-dev-framework/main.py [options]
 
 --goal "text"      项目目标（首次运行必填）
 --auto-approve     跳过规划审批，直接开始执行
@@ -90,12 +90,12 @@ python .cc-dev-framework/orchestrator.py [options]
 ```
 my-project/
 ├── .cc-dev-framework/
-│   ├── orchestrator.py         ← 主入口
+│   ├── main.py                 ← 主入口
 │   ├── status.py               ← 查进度
 │   ├── init.sh                 ← 环境初始化（自动被 Planner 填充）
 │   ├── features.json           ← 功能规划数据
 │   ├── progress.json           ← 会话记录
-│   ├── orchestrator.log        ← 运行日志（自动生成，每次清空）
+│   ├── main.log        ← 运行日志（自动生成，每次清空）
 │   ├── roles/                  ← AI 角色 + 验证
 │   │   ├── planner.py
 │   │   ├── executor.py
@@ -119,34 +119,34 @@ my-project/
 ### Python 后端项目
 
 ```bash
-python .cc-dev-framework/orchestrator.py \
+python .cc-dev-framework/main.py \
   --goal "Build a REST API with FastAPI + SQLite for a todo app with user auth"
 ```
 
 ### React 前端项目
 
 ```bash
-python .cc-dev-framework/orchestrator.py \
+python .cc-dev-framework/main.py \
   --goal "Create a React + TypeScript dashboard with charts, auth, and dark mode"
 ```
 
 ### 全栈项目
 
 ```bash
-python .cc-dev-framework/orchestrator.py \
+python .cc-dev-framework/main.py \
   --goal "Build an OA system: FastAPI backend, React frontend, SQLite. Modules: auth, attendance, leave requests, announcements"
 ```
 
 ### 只看计划不执行
 
 ```bash
-python .cc-dev-framework/orchestrator.py --dry-run --goal "..."
+python .cc-dev-framework/main.py --dry-run --goal "..."
 ```
 
 ### 跳过审批直接跑
 
 ```bash
-python .cc-dev-framework/orchestrator.py --auto-approve --goal "..."
+python .cc-dev-framework/main.py --auto-approve --goal "..."
 ```
 
 ## 4 项验证门禁
@@ -162,7 +162,7 @@ python .cc-dev-framework/orchestrator.py --auto-approve --goal "..."
 
 ## 日志
 
-每次运行 orchestrator 会生成日志文件 `.cc-dev-framework/orchestrator.log`（每次运行清空）。
+每次运行会生成日志文件 `.cc-dev-framework/main.log`（每次运行清空）。
 
 日志记录：
 - 每个阶段的开始/结束
@@ -174,12 +174,12 @@ python .cc-dev-framework/orchestrator.py --auto-approve --goal "..."
 出问题时先查日志：
 
 ```bash
-cat .cc-dev-framework/orchestrator.log
+cat .cc-dev-framework/main.log
 ```
 
 ## 中文输出
 
-框架所有终端输出均为中文。Claude 的回复也会以中文呈现（通过 `--append-system-prompt` 注入中文指令）。
+框架所有终端输出均为中文。prompt 模板和 system_note 都是中文，Claude 自然以中文回复。
 
 ## 平台支持
 
@@ -189,7 +189,7 @@ cat .cc-dev-framework/orchestrator.log
 ## 常见问题
 
 **Q: Claude 跑到一半断了怎么办？**
-A: 再运行一次 `python .cc-dev-framework/orchestrator.py`，会自动恢复。
+A: 再运行一次 `python .cc-dev-framework/main.py`，会自动恢复。
 
 **Q: 规划不满意怎么办？**
 A: 审批时输入 `n` 拒绝，然后换个 goal 描述重新跑。
@@ -198,4 +198,4 @@ A: 审批时输入 `n` 拒绝，然后换个 goal 描述重新跑。
 A: 框架会在 max-retries 次后标记为 failed 并停止。检查 `status.py` 看错误信息，手动修复后可以用 `--feature ID` 单独重跑。
 
 **Q: 想增加新一轮 feature？**
-A: 上一轮完成后 features 已归档，直接再跑一次 orchestrator 并给新 goal 即可。
+A: 上一轮完成后 features 已归档，直接再跑一次 `python .cc-dev-framework/main.py` 并给新 goal 即可。

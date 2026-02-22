@@ -17,6 +17,6 @@ FIX_PROMPT = """\
 1. 仔细阅读错误输出。
 2. 修复根本原因 —— 不要只是抑制错误。
 3. 不要修改 verify_commands 或 features.json。
-4. 不要运行 verify.py 或 complete.py —— orchestrator 会重新运行它们。
+4. 不要运行 verify.py 或 complete.py —— 编排器会重新运行它们。
 5. 修复完成后，输出：FIX_DONE
 """
