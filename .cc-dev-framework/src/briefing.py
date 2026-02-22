@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 from store import (
     ARCHIVE_DIR,
     Feature,
-    feature_to_dict,
     load_archive,
     load_feature_objects,
     load_features,
@@ -236,10 +235,10 @@ def generate_executor_briefing(
     return briefing
 
 
-def generate_analyst_briefing(project_dir: Path, goal: str) -> str:
-    """生成 Analyst 上下文：用户目标 + 目录树 + 配置文件。
+def generate_preparer_briefing(project_dir: Path, goal: str) -> str:
+    """生成 Preparer 上下文：用户目标 + 目录树 + 配置文件。
 
-    不包含归档信息（分析阶段不关心历史）。
+    不包含归档信息（准备阶段不关心历史）。
     """
     tree = _dir_tree(project_dir, max_depth=2)
     configs = _read_configs(project_dir)
@@ -298,31 +297,9 @@ def generate_e2e_briefing(project_dir: Path, feature: Feature) -> str:
 ## 提醒
 - 你是 E2E 测试专员，只负责测试，不要修改代码
 - 机械验证已经通过（编译 + 单元测试），现在需要验证功能逻辑
-- 测试完成后在最后一行输出 E2E_PASSED / E2E_FAILED / E2E_BLOCKED
+- 测试完成后在最后一行输出 E2E_PASSED / E2E_SKIPPED / E2E_FAILED
 """
 
     if len(briefing) > _MAX_TOTAL_CHARS:
         briefing = briefing[:_MAX_TOTAL_CHARS] + "\n...（已截断）"
-    return briefing
-
-
-def generate_judge_briefing(feature: Feature, e2e_output: str) -> str:
-    """生成规划师判定简报：feature 定义 + E2E 失败详情。"""
-    import json as _json
-    feature_json = _json.dumps(feature_to_dict(feature), indent=2, ensure_ascii=False)
-
-    briefing = f"""\
-## Feature: {feature.id}
-标题: {feature.title}
-
-## Feature 定义
-```json
-{feature_json}
-```
-
-## E2E 测试失败详情
-```
-{e2e_output[-3000:] if len(e2e_output) > 3000 else e2e_output}
-```
-"""
     return briefing
