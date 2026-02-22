@@ -68,6 +68,9 @@ def main():
         print(f"git add 失败: {out}")
         sys.exit(1)
 
+    # Unstage framework log files — they should never be committed
+    _git("reset", "--", ".cc-dev-framework/*.log")
+
     rc, out = _git("commit", "-m", args.message)
     if rc != 0:
         if "nothing to commit" in out:
@@ -86,18 +89,27 @@ def main():
 
     # 4. Merge
     print(f"\n=== 合并 {branch} -> {main_branch} ===")
+
+    # Stash any dirty files (e.g. session.log being written during execution)
+    _git("stash", "--include-untracked")
+
     rc, out = _git("checkout", main_branch)
     if rc != 0:
         print(f"git checkout {main_branch} 失败: {out}")
+        _git("stash", "pop")
         sys.exit(1)
 
     rc, out = _git("merge", branch, "--no-edit")
     if rc != 0:
         print(f"git merge 失败: {out}")
+        _git("stash", "pop")
         sys.exit(1)
 
     # 5. Delete branch
     _git("branch", "-d", branch)
+
+    # Restore stashed files
+    _git("stash", "pop")
 
     # 6. Update features.json
     update_feature_field(args.feature, status="completed", commit_hash=commit_hash)
