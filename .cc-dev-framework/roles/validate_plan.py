@@ -1,6 +1,6 @@
-"""Plan quality gate — mechanical checks on features.json structure.
+"""规划质量检查 — features.json 结构的机械验证。
 
-Supports both CLI and module import:
+支持 CLI 和模块导入两种方式：
   CLI:    python validate_plan.py
   Import: from validate_plan import validate_plan
 """
@@ -136,13 +136,13 @@ def main() -> None:
     errors = validate_plan(data, is_first_iteration=is_first)
 
     if errors:
-        print(f"VALIDATION FAILED ({len(errors)} error(s)):")
+        print(f"验证失败（{len(errors)} 个错误）:")
         for e in errors:
             print(f"  [FAIL] {e}")
         sys.exit(1)
     else:
         count = len(data.get("features", []))
-        print(f"VALIDATION PASSED ({count} features)")
+        print(f"验证通过（{count} 个 feature）")
         sys.exit(0)
 
 

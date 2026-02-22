@@ -1,4 +1,4 @@
-"""Complete a feature — verify + commit + merge + mark completed.
+"""完成 feature — 验证 + 提交 + 合并 + 标记完成。
 
 Usage: python .cc-dev-framework/core/complete.py -f <feature-id> -m "commit message"
 """
@@ -35,59 +35,59 @@ def _git(*args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Complete a feature")
+    parser = argparse.ArgumentParser(description="完成 feature")
     parser.add_argument("-f", "--feature", required=True, help="Feature ID")
-    parser.add_argument("-m", "--message", required=True, help="Commit message")
+    parser.add_argument("-m", "--message", required=True, help="提交信息")
     args = parser.parse_args()
 
     feature = get_feature(args.feature)
     if feature is None:
-        print(f"Feature not found: {args.feature}")
+        print(f"Feature 未找到: {args.feature}")
         sys.exit(1)
 
     branch = f"feature/{args.feature}"
 
     # 1. Run verify
-    print(f"=== Verify: {args.feature} ===")
+    print(f"=== 验证: {args.feature} ===")
     rc, out = _run([sys.executable, str(VERIFY_SCRIPT), "-f", args.feature])
     print(out)
     if rc != 0:
-        print("\nVerify failed. Fix issues and retry.")
+        print("\n验证失败。请修复问题后重试。")
         sys.exit(1)
 
     # Re-read feature after verify (verify writes done_evidence)
     feature = get_feature(args.feature)
 
     # 2. Git add + commit
-    print(f"\n=== Commit ===")
+    print(f"\n=== 提交 ===")
     rc, out = _git("add", "-A")
     if rc != 0:
-        print(f"git add failed: {out}")
+        print(f"git add 失败: {out}")
         sys.exit(1)
 
     rc, out = _git("commit", "-m", args.message)
     if rc != 0:
-        print(f"git commit failed: {out}")
+        print(f"git commit 失败: {out}")
         sys.exit(1)
 
     # Get commit hash
     rc, hash_out = _git("rev-parse", "--short", "HEAD")
     commit_hash = hash_out.strip() if rc == 0 else None
-    print(f"Committed: {commit_hash}")
+    print(f"已提交: {commit_hash}")
 
     # 3. Detect main branch name
     main_branch = _detect_main_branch()
 
     # 4. Merge
-    print(f"\n=== Merge {branch} -> {main_branch} ===")
+    print(f"\n=== 合并 {branch} -> {main_branch} ===")
     rc, out = _git("checkout", main_branch)
     if rc != 0:
-        print(f"git checkout {main_branch} failed: {out}")
+        print(f"git checkout {main_branch} 失败: {out}")
         sys.exit(1)
 
     rc, out = _git("merge", branch, "--no-edit")
     if rc != 0:
-        print(f"git merge failed: {out}")
+        print(f"git merge 失败: {out}")
         sys.exit(1)
 
     # 5. Delete branch
@@ -96,9 +96,9 @@ def main():
     # 6. Update features.json
     update_feature_field(args.feature, status="completed", commit_hash=commit_hash)
 
-    print(f"\nCompleted: {args.feature} ({feature.title})")
-    print(f"Commit: {commit_hash}")
-    print(f"Merged to: {main_branch}")
+    print(f"\n已完成: {args.feature} ({feature.title})")
+    print(f"提交: {commit_hash}")
+    print(f"已合并到: {main_branch}")
 
 
 def _detect_main_branch():

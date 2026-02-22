@@ -1,4 +1,4 @@
-"""Start a feature — create branch + set status to in_progress.
+"""启动 feature — 创建分支 + 设置状态为 in_progress。
 
 Usage: python .cc-dev-framework/core/start.py -f <feature-id>
 """
@@ -20,17 +20,17 @@ from store import get_feature, update_feature_field, PROJECT_DIR
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Start a feature")
+    parser = argparse.ArgumentParser(description="启动 feature")
     parser.add_argument("-f", "--feature", required=True, help="Feature ID")
     args = parser.parse_args()
 
     feature = get_feature(args.feature)
     if feature is None:
-        print(f"Feature not found: {args.feature}")
+        print(f"Feature 未找到: {args.feature}")
         sys.exit(1)
 
     if feature.status not in ("pending", "failed"):
-        print(f"Feature {args.feature} is {feature.status}, expected pending or failed")
+        print(f"Feature {args.feature} 状态为 {feature.status}，期望 pending 或 failed")
         sys.exit(1)
 
     # Create branch
@@ -48,16 +48,16 @@ def main():
             encoding="utf-8", errors="replace",
         )
         if proc.returncode != 0:
-            print(f"Failed to create/switch to branch {branch}")
+            print(f"无法创建或切换到分支 {branch}")
             print(proc.stderr)
             sys.exit(1)
 
     # Set status
     update_feature_field(args.feature, status="in_progress")
 
-    print(f"Started: {args.feature} ({feature.title})")
-    print(f"Branch: {branch}")
-    print(f"Steps: {len(feature.steps)}")
+    print(f"已启动: {args.feature} ({feature.title})")
+    print(f"分支: {branch}")
+    print(f"步骤数: {len(feature.steps)}")
     for i, s in enumerate(feature.steps):
         tag = "x" if s.done else " "
         print(f"  [{tag}] {i}: {s.description}")

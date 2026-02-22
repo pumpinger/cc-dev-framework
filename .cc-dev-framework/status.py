@@ -1,4 +1,4 @@
-"""Status display — show progress and recovery info.
+"""进度查看 — 显示项目状态与恢复信息。
 
 Usage: python .cc-dev-framework/status.py
 """
@@ -30,9 +30,9 @@ def main():
     total = len(features)
     completed = sum(1 for f in features if f.status == "completed")
 
-    print(f"Project: {project}")
-    print(f"Goal: {goal}")
-    print(f"Progress: {completed}/{total} features completed")
+    print(f"项目: {project}")
+    print(f"目标: {goal}")
+    print(f"进度: {completed}/{total} 个 feature 已完成")
 
     # --- Archive summary ---
     archives = list_archives()
@@ -43,20 +43,20 @@ def main():
             adata = load_archive(ver)
             count = len(adata.get("features", []))
             total_archived += count
-        print(f"Archive: {len(archives)} version(s), {total_archived} features archived")
+        print(f"归档: {len(archives)} 个版本，共 {total_archived} 个 feature 已归档")
 
     # --- Last session from progress.json ---
     last = _last_session()
     if last:
         print()
-        print(f"Last session ({last.get('date', '?')}):")
+        print(f"上次会话 ({last.get('date', '?')}):")
         if last.get("summary"):
             print(f"  {last['summary']}")
         if last.get("next"):
-            print(f"  Next: {last['next']}")
+            print(f"  下一步: {last['next']}")
         if last.get("blockers"):
             for b in last["blockers"]:
-                print(f"  Blocker: {b}")
+                print(f"  阻塞: {b}")
 
     # --- Recovery info from features.json ---
     in_progress = next((f for f in features if f.status == "in_progress"), None)
@@ -70,21 +70,21 @@ def main():
         )
 
         print()
-        print(f"RESUME: {in_progress.id} ({in_progress.title})")
-        print(f"  Steps: {done_count}/{total_steps} done")
+        print(f"恢复: {in_progress.id} ({in_progress.title})")
+        print(f"  步骤: {done_count}/{total_steps} 已完成")
         if next_step is not None:
-            print(f"  Next step [{next_step}]: {in_progress.steps[next_step].description}")
+            print(f"  下一步 [{next_step}]: {in_progress.steps[next_step].description}")
         if branch == expected:
-            print(f"  Branch: {branch} (correct)")
+            print(f"  分支: {branch} (正确)")
         else:
-            print(f"  Branch: {branch or '(unknown)'} (expected: {expected})")
+            print(f"  分支: {branch or '(未知)'} (预期: {expected})")
         if in_progress.error:
-            print(f"  Last error: {in_progress.error}")
+            print(f"  上次错误: {in_progress.error}")
 
     print()
 
     if not features:
-        print("No features planned yet.")
+        print("尚无 feature 规划。")
         return
 
     for f in features:
@@ -106,7 +106,7 @@ def main():
                 print(f"      [{tag}] {g.name}: {g.detail}")
 
         if f.error:
-            print(f"      Error: {f.error}")
+            print(f"      错误: {f.error}")
 
 
 def _last_session() -> dict | None:

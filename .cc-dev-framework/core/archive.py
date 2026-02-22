@@ -1,9 +1,9 @@
-"""Archive — move completed features to archive/vN.json.
+"""归档 — 将已完成的 feature 移动到 archive/vN.json。
 
 Usage: python .cc-dev-framework/core/archive.py
 
-Moves all completed features from features.json into archive/vN.json,
-keeping features.json clean for the next iteration.
+将 features.json 中所有 completed 的 feature 归档到 archive/vN.json，
+保持 features.json 干净以便下一轮迭代。
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def main():
     remaining = [f for f in features if f.get("status") != "completed"]
 
     if not completed:
-        print("No completed features to archive.")
+        print("没有已完成的 feature 需要归档。")
         return
 
     # Determine version
@@ -62,10 +62,10 @@ def main():
     raw["features"] = remaining
     save_features(raw)
 
-    print(f"Archived {len(completed)} features to {version}.json")
+    print(f"已归档 {len(completed)} 个 feature 到 {version}.json")
     for feat in completed:
         print(f"  {feat['id']}: {feat['title']}")
-    print(f"\nfeatures.json now has {len(remaining)} feature(s)")
+    print(f"\nfeatures.json 现有 {len(remaining)} 个 feature")
 
 
 if __name__ == "__main__":

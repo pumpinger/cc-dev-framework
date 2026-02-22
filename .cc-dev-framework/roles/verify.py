@@ -1,14 +1,14 @@
-"""Gate check — script-driven verification for feature completion.
+"""门禁检查 — 脚本驱动的 feature 完成验证。
 
 Usage: python .cc-dev-framework/roles/verify.py -f <feature-id>
 
-Checks 4 gate points (all mechanical, no AI judgment):
-  1. steps_done        — all steps marked done?
-  2. steps_evidence    — every done step has evidence?
-  3. verify_commands    — all commands exit 0?
-  4. git_branch        — on correct feature branch?
+检查 4 个门禁（全部机械检查，无 AI 判断）：
+  1. steps_done        — 所有步骤都标记完成？
+  2. steps_evidence    — 每个已完成步骤都有证据？
+  3. verify_commands    — 所有命令 exit 0？
+  4. git_branch        — 在正确的 feature 分支上？
 
-After GATE PASSED, commit (includes evidence) then merge.
+验证通过后，提交（包含证据）然后合并。
 """
 
 from __future__ import annotations
@@ -38,16 +38,16 @@ from store import (
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run gate check for a feature")
+    parser = argparse.ArgumentParser(description="对 feature 执行门禁检查")
     parser.add_argument("-f", "--feature", required=True, help="Feature ID")
     args = parser.parse_args()
 
     feature = get_feature(args.feature)
     if feature is None:
-        print(f"Feature not found: {args.feature}")
+        print(f"Feature 未找到: {args.feature}")
         sys.exit(1)
 
-    print(f"Gate check: {feature.id} ({feature.title})")
+    print(f"门禁检查: {feature.id} ({feature.title})")
     print()
 
     gates: list[GateCheck] = []
@@ -55,18 +55,18 @@ def main():
 
     # --- Gate 1: all steps done? ---
     if not feature.steps:
-        gates.append(GateCheck("steps_done", False, "No steps defined"))
+        gates.append(GateCheck("steps_done", False, "未定义步骤"))
     else:
         undone = [s.description for s in feature.steps if not s.done]
         if undone:
             gates.append(GateCheck(
                 "steps_done", False,
-                f"{len(undone)} step(s) not done: {undone[0]}"
+                f"{len(undone)} 个步骤未完成: {undone[0]}"
             ))
         else:
             gates.append(GateCheck(
                 "steps_done", True,
-                f"All {len(feature.steps)} steps done"
+                f"全部 {len(feature.steps)} 个步骤已完成"
             ))
 
     # --- Gate 2: evidence for every done step? ---
@@ -75,19 +75,19 @@ def main():
     if no_evidence:
         gates.append(GateCheck(
             "steps_evidence", False,
-            f"{len(no_evidence)} done step(s) missing evidence: {no_evidence[0]}"
+            f"{len(no_evidence)} 个已完成步骤缺少证据: {no_evidence[0]}"
         ))
     elif done_steps:
         gates.append(GateCheck(
             "steps_evidence", True,
-            f"All {len(done_steps)} done steps have evidence"
+            f"全部 {len(done_steps)} 个已完成步骤都有证据"
         ))
     else:
-        gates.append(GateCheck("steps_evidence", False, "No done steps"))
+        gates.append(GateCheck("steps_evidence", False, "没有已完成的步骤"))
 
     # --- Gate 3: verify_commands execution ---
     if not feature.verify_commands:
-        gates.append(GateCheck("verify_commands", False, "No verify_commands defined"))
+        gates.append(GateCheck("verify_commands", False, "未定义 verify_commands"))
     else:
         verify_results = _run_commands(feature.verify_commands)
         all_pass = all(r.passed for r in verify_results)
@@ -95,23 +95,23 @@ def main():
         if all_pass:
             gates.append(GateCheck(
                 "verify_commands", True,
-                f"All {len(verify_results)} commands passed"
+                f"全部 {len(verify_results)} 条命令通过"
             ))
         else:
             gates.append(GateCheck(
                 "verify_commands", False,
-                f"{failed}/{len(verify_results)} commands failed"
+                f"{failed}/{len(verify_results)} 条命令失败"
             ))
 
     # --- Gate 4: correct git branch? ---
     expected = f"feature/{feature.id}"
     current = _git_current_branch()
     if current == expected:
-        gates.append(GateCheck("git_branch", True, f"On branch {current}"))
+        gates.append(GateCheck("git_branch", True, f"在分支 {current} 上"))
     else:
         gates.append(GateCheck(
             "git_branch", False,
-            f"Expected {expected}, on {current or '(unknown)'}"
+            f"预期 {expected}，当前 {current or '(未知)'}"
         ))
 
     # --- Save evidence ---
@@ -125,7 +125,7 @@ def main():
     update_evidence(feature.id, evidence)
 
     # --- Output ---
-    print("Gate checks:")
+    print("门禁检查结果:")
     for g in gates:
         tag = "PASS" if g.passed else "FAIL"
         print(f"  [{tag}] {g.name}: {g.detail}")
@@ -133,7 +133,7 @@ def main():
     failed_cmds = [r for r in verify_results if not r.passed]
     if failed_cmds:
         print()
-        print("Failed commands:")
+        print("失败的命令:")
         for r in failed_cmds:
             print(f"  $ {r.command}")
             print(f"    exit={r.exit_code}")
@@ -143,10 +143,10 @@ def main():
 
     print()
     if all_passed:
-        print("GATE PASSED")
+        print("验证通过")
     else:
         count = sum(1 for g in gates if not g.passed)
-        print(f"GATE FAILED ({count} check(s) not passed)")
+        print(f"验证失败（{count} 项检查未通过）")
         sys.exit(1)
 
 
@@ -170,12 +170,12 @@ def _run_commands(commands: list[str]) -> list[VerifyResult]:
         except subprocess.TimeoutExpired:
             results.append(VerifyResult(
                 command=cmd, exit_code=-1,
-                stdout="TIMEOUT: exceeded 120s", passed=False,
+                stdout="超时: 超过 120 秒", passed=False,
             ))
         except Exception as e:
             results.append(VerifyResult(
                 command=cmd, exit_code=-1,
-                stdout=f"ERROR: {e}", passed=False,
+                stdout=f"错误: {e}", passed=False,
             ))
     return results
 
