@@ -444,11 +444,11 @@ def extract_verify_errors(output: str) -> dict:
 def _parse_e2e_result(output: str) -> tuple[str, str]:
     """Parse E2E tester output for result marker.
 
-    Scans the last 20 lines for E2E_PASSED / E2E_FAILED / E2E_BLOCKED.
+    Scans the last 20 lines for E2E_PASSED / E2E_SKIPPED / E2E_FAILED / E2E_BLOCKED.
 
     Returns:
-        (result, detail) where result is "passed", "failed", or "blocked",
-        and detail is the reason text (empty for passed).
+        (result, detail) where result is "passed", "skipped", "failed", or "blocked".
+        "skipped" is logically equivalent to "passed" (→ complete).
     """
     lines = output.strip().split("\n")
     # Search from the end
@@ -456,6 +456,11 @@ def _parse_e2e_result(output: str) -> tuple[str, str]:
         stripped = line.strip()
         if stripped == "E2E_PASSED":
             return "passed", ""
+        if stripped.startswith("E2E_SKIPPED:"):
+            detail = stripped[len("E2E_SKIPPED:"):].strip()
+            return "skipped", detail
+        if stripped == "E2E_SKIPPED":
+            return "skipped", ""
         if stripped.startswith("E2E_FAILED:"):
             detail = stripped[len("E2E_FAILED:"):].strip()
             return "failed", detail
@@ -1065,6 +1070,23 @@ def _execute_feature(feature: Feature, max_retries: int, max_e2e_retries: int) -
                              error=f"验证在 {max_retries} 次重试后仍失败")
         return False
 
+    # --- E2E testing ---
+    # project-setup 是基础设施 feature，没有可验证的功能逻辑，跳过 E2E
+    if feature.id == "project-setup":
+        msg = f"E2E 无需: {feature.id}（基础设施 feature，跳过 E2E 测试）"
+        print(f"\n[main] {msg}")
+        logger.info(msg)
+        commit_msg = f"feat({feature.id}): {feature.title}"
+        rc = run_script("src/complete.py", "-f", feature.id, "-m", commit_msg)
+        if rc != 0:
+            msg = f"警告: complete.py 对 {feature.id} 执行失败"
+            print(f"[main] {msg}")
+            logger.error(msg)
+            update_feature_field(feature.id, error="complete.py 执行失败")
+            return False
+        logger.info("feature %s 完成", feature.id)
+        return True
+
     # --- E2E testing loop ---
     for e2e_attempt in range(1, max_e2e_retries + 1):
         msg = f"E2E 测试尝试 {e2e_attempt}/{max_e2e_retries}: {feature.id}"
@@ -1073,8 +1095,10 @@ def _execute_feature(feature: Feature, max_retries: int, max_e2e_retries: int) -
 
         e2e_result, e2e_detail = _run_e2e_tester(feature)
 
-        if e2e_result == "passed":
-            msg = f"E2E 测试通过: {feature.id}"
+        if e2e_result in ("passed", "skipped"):
+            label = "通过" if e2e_result == "passed" else "无需"
+            detail_msg = f"（{e2e_detail}）" if e2e_detail else ""
+            msg = f"E2E 测试{label}: {feature.id}{detail_msg}"
             print(f"\n[main] {msg}")
             logger.info(msg)
             # Complete the feature

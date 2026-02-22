@@ -23,6 +23,10 @@ E2E_TESTER_PROMPT = """\
 ## 输出
 完成后在最后一行输出以下标记之一：
 E2E_PASSED
+E2E_SKIPPED: <无需测试的原因>
 E2E_FAILED: <失败原因概要>
 E2E_BLOCKED: <受阻原因概要>
+
+注意：如果 feature 是纯基础设施类（如环境搭建、配置文件、CI 流水线），没有可验证的功能逻辑，
+应输出 E2E_SKIPPED。
 """
