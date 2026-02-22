@@ -32,8 +32,10 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-# Imports from same directory
-sys.path.insert(0, str(Path(__file__).parent))
+# Imports from core/ and roles/
+FRAMEWORK_DIR = Path(__file__).parent
+sys.path.insert(0, str(FRAMEWORK_DIR / "core"))
+sys.path.insert(0, str(FRAMEWORK_DIR / "roles"))
 from briefing import generate_executor_briefing, generate_planner_briefing
 from prompts import EXECUTOR_PROMPT, FIX_PROMPT, PLANNER_PROMPT
 from store import (
@@ -46,9 +48,8 @@ from store import (
 )
 from validate_plan import validate_plan
 
-AIFW_DIR = Path(__file__).parent
-PROJECT_DIR = AIFW_DIR.parent
-PROGRESS_PATH = AIFW_DIR / "progress.json"
+PROJECT_DIR = FRAMEWORK_DIR.parent
+PROGRESS_PATH = FRAMEWORK_DIR / "progress.json"
 
 # Claude command timeout (seconds)
 CLAUDE_TIMEOUT = 600  # 10 minutes
@@ -195,7 +196,7 @@ def call_claude(
 
 def run_script(name: str, *args: str) -> int:
     """Run a framework script. Returns exit code."""
-    script = AIFW_DIR / name
+    script = FRAMEWORK_DIR / name
     cmd = [sys.executable, str(script)] + list(args)
     print(f"[orchestrator] Running: {name} {' '.join(args)}")
     proc = subprocess.run(
@@ -207,7 +208,7 @@ def run_script(name: str, *args: str) -> int:
 
 def run_script_capture(name: str, *args: str) -> tuple[int, str]:
     """Run a framework script, capture output. Returns (exit_code, output)."""
-    script = AIFW_DIR / name
+    script = FRAMEWORK_DIR / name
     cmd = [sys.executable, str(script)] + list(args)
     print(f"[orchestrator] Running: {name} {' '.join(args)}")
     proc = subprocess.run(
@@ -221,7 +222,7 @@ def run_script_capture(name: str, *args: str) -> tuple[int, str]:
 
 def run_init() -> bool:
     """Run init.sh. Returns True on success."""
-    init_script = AIFW_DIR / "init.sh"
+    init_script = FRAMEWORK_DIR / "init.sh"
     if not init_script.exists():
         print("[orchestrator] WARNING: init.sh not found, skipping")
         return True
@@ -700,7 +701,7 @@ def main() -> None:
     if completed and len(completed) == len(all_features):
         print()
         print("[PHASE 5] Archiving completed features...")
-        run_script("archive.py")
+        run_script("core/archive.py")
 
     # ---------------------------------------------------------------
     # DONE
@@ -734,7 +735,7 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
 
     # Start feature (create branch + set in_progress) if still pending
     if feature.status == "pending":
-        rc = run_script("start.py", "-f", feature.id)
+        rc = run_script("core/start.py", "-f", feature.id)
         if rc != 0:
             print(f"[orchestrator] ERROR: start.py failed for {feature.id}")
             update_feature_field(feature.id, status="failed", error="start.py failed")
@@ -747,14 +748,14 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
     for attempt in range(1, max_retries + 1):
         print(f"\n[orchestrator] Verify attempt {attempt}/{max_retries} for {feature.id}")
 
-        rc, verify_output = run_script_capture("verify.py", "-f", feature.id)
+        rc, verify_output = run_script_capture("roles/verify.py", "-f", feature.id)
         print(verify_output)
 
         if rc == 0:
             # GATE PASSED — complete the feature
             print(f"\n[orchestrator] GATE PASSED for {feature.id}")
             commit_msg = f"feat({feature.id}): {feature.title}"
-            rc = run_script("complete.py", "-f", feature.id, "-m", commit_msg)
+            rc = run_script("core/complete.py", "-f", feature.id, "-m", commit_msg)
             if rc != 0:
                 print(f"[orchestrator] WARNING: complete.py failed for {feature.id}")
                 update_feature_field(feature.id, error="complete.py failed")

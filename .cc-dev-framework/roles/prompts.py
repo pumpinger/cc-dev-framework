@@ -84,7 +84,7 @@ You are the **Executor**. Implement the feature described below.
 ## Rules
 1. Implement steps IN ORDER, starting from step {start_step}.
 2. After completing each step, run:
-   `python .cc-dev-framework/step.py -f {feature_id} -s <N> -e "evidence"`
+   `python .cc-dev-framework/core/step.py -f {feature_id} -s <N> -e "evidence"`
    where <N> is the 0-based step index and evidence describes what you did.
 3. Do NOT run verify.py, complete.py, or archive.py — the orchestrator \
 handles verification.

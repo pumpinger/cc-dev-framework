@@ -1,6 +1,6 @@
 """Archive — move completed features to archive/vN.json.
 
-Usage: python .aifw/archive.py
+Usage: python .cc-dev-framework/core/archive.py
 
 Moves all completed features from features.json into archive/vN.json,
 keeping features.json clean for the next iteration.

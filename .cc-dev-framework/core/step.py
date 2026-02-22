@@ -1,6 +1,6 @@
 """Mark a step as done with evidence.
 
-Usage: python .aifw/step.py -f <feature-id> -s <step-index> -e "evidence text"
+Usage: python .cc-dev-framework/core/step.py -f <feature-id> -s <step-index> -e "evidence text"
 """
 
 from __future__ import annotations

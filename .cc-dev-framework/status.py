@@ -1,6 +1,6 @@
 """Status display — show progress and recovery info.
 
-Usage: python .aifw/status.py
+Usage: python .cc-dev-framework/status.py
 """
 
 from __future__ import annotations
@@ -16,11 +16,9 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
-sys.path.insert(0, str(Path(__file__).parent))
-from store import load_features, Feature, list_archives, load_archive, ARCHIVE_DIR
-
-AIFW_DIR = Path(__file__).parent
-PROJECT_DIR = AIFW_DIR.parent
+FRAMEWORK_DIR = Path(__file__).parent
+sys.path.insert(0, str(FRAMEWORK_DIR / "core"))
+from store import load_features, Feature, list_archives, load_archive, ARCHIVE_DIR, PROJECT_DIR
 
 
 def main():
@@ -112,7 +110,7 @@ def main():
 
 
 def _last_session() -> dict | None:
-    path = AIFW_DIR / "progress.json"
+    path = FRAMEWORK_DIR / "progress.json"
     if not path.exists():
         return None
     try:

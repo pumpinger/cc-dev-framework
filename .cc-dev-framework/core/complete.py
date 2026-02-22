@@ -1,6 +1,6 @@
 """Complete a feature — verify + commit + merge + mark completed.
 
-Usage: python .aifw/complete.py -f <feature-id> -m "commit message"
+Usage: python .cc-dev-framework/core/complete.py -f <feature-id> -m "commit message"
 """
 
 from __future__ import annotations
@@ -16,10 +16,9 @@ if sys.platform == "win32":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).parent))
-from store import get_feature, update_feature_field
+from store import get_feature, update_feature_field, PROJECT_DIR
 
-PROJECT_DIR = Path(__file__).parent.parent
-VERIFY_SCRIPT = Path(__file__).parent / "verify.py"
+VERIFY_SCRIPT = Path(__file__).parent.parent / "roles" / "verify.py"
 
 
 def _run(cmd, **kwargs):

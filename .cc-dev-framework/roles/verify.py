@@ -25,17 +25,16 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
-# Import from same directory
-sys.path.insert(0, str(Path(__file__).parent))
+# Import from core/
+sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
 from store import (
     DoneEvidence,
     GateCheck,
+    PROJECT_DIR,
     VerifyResult,
     get_feature,
     update_evidence,
 )
-
-PROJECT_DIR = Path(__file__).parent.parent
 
 
 def main():

@@ -12,9 +12,10 @@ import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-AIFW_DIR = Path(__file__).parent
-FEATURES_PATH = AIFW_DIR / "features.json"
-ARCHIVE_DIR = AIFW_DIR / "archive"
+FRAMEWORK_DIR = Path(__file__).parent.parent   # .cc-dev-framework/
+PROJECT_DIR = FRAMEWORK_DIR.parent              # project root
+FEATURES_PATH = FRAMEWORK_DIR / "features.json"
+ARCHIVE_DIR = FRAMEWORK_DIR / "archive"
 
 
 # --- Data Model ---

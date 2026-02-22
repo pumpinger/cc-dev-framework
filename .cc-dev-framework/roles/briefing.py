@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
 from store import (
     ARCHIVE_DIR,
     Feature,
@@ -198,7 +198,7 @@ Priority: {feature.priority}
 ```
 
 ## Reminders
-- Run `python .cc-dev-framework/step.py -f {feature.id} -s <N> -e "evidence"` \
+- Run `python .cc-dev-framework/core/step.py -f {feature.id} -s <N> -e "evidence"` \
 after each step.
 - Do NOT run verify.py / complete.py / archive.py.
 - Write test files referenced in verify_commands.

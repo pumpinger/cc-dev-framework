@@ -1,6 +1,6 @@
 """Start a feature — create branch + set status to in_progress.
 
-Usage: python .aifw/start.py -f <feature-id>
+Usage: python .cc-dev-framework/core/start.py -f <feature-id>
 """
 
 from __future__ import annotations
@@ -16,9 +16,7 @@ if sys.platform == "win32":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).parent))
-from store import get_feature, update_feature_field
-
-PROJECT_DIR = Path(__file__).parent.parent
+from store import get_feature, update_feature_field, PROJECT_DIR
 
 
 def main():
