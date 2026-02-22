@@ -36,7 +36,9 @@ sys.path.insert(0, str(FRAMEWORK_DIR / "core"))
 sys.path.insert(0, str(FRAMEWORK_DIR / "roles"))
 from briefing import generate_executor_briefing, generate_planner_briefing
 from log import get_logger, setup_logging
-from prompts import EXECUTOR_PROMPT, FIX_PROMPT, PLANNER_PROMPT
+from planner import PLANNER_PROMPT
+from executor import EXECUTOR_PROMPT
+from fixer import FIX_PROMPT
 from store import (
     Feature,
     get_feature,

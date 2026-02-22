@@ -97,7 +97,9 @@ my-project/
 │   ├── progress.json           ← 会话记录
 │   ├── orchestrator.log        ← 运行日志（自动生成，每次清空）
 │   ├── roles/                  ← AI 角色 + 验证
-│   │   ├── prompts.py
+│   │   ├── planner.py
+│   │   ├── executor.py
+│   │   ├── fixer.py
 │   │   ├── briefing.py
 │   │   ├── verify.py
 │   │   └── validate_plan.py

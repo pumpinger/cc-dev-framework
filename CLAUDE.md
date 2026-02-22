@@ -25,7 +25,9 @@ cc-dev-framework/               ← 仓库根目录
     ├── progress.json           ← 会话进度记录
     ├── orchestrator.log        ← 运行日志（每次运行清空）
     ├── roles/                  ← AI 角色 + 验证
-    │   ├── prompts.py          ← Planner/Executor/Fixer prompt 模板
+    │   ├── planner.py          ← Planner prompt 模板
+    │   ├── executor.py         ← Executor prompt 模板
+    │   ├── fixer.py            ← Fixer prompt 模板
     │   ├── briefing.py         ← 上下文压缩，注入项目信息给 Claude
     │   ├── verify.py           ← 4 项门禁（steps_done, evidence, commands, branch）
     │   └── validate_plan.py    ← 规划质量检查（8 项）
@@ -85,7 +87,7 @@ INIT → RESUME → PLAN → EXECUTE (循环: verify→fix) → ARCHIVE
 ## 开发注意事项
 
 - 改了 `store.py` 的数据模型，需同步检查 `verify.py`、`complete.py`、`status.py`
-- 改了 prompt 模板，需检查 `briefing.py` 中的对应部分是否一致
+- 改了 prompt 模板（`planner.py`/`executor.py`/`fixer.py`），需检查 `briefing.py` 中的对应部分是否一致
 - 改了目录结构，需更新 `orchestrator.py` 中的 `run_script()` 路径
 - 新增脚本时：放 `core/` 或 `roles/`，在 `__init__.py` 旁边，确保 sys.path 正确
 - 改了 `verify.py` 的输出格式，需同步更新 `orchestrator.py` 的 `extract_verify_errors()` 正则
