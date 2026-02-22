@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from store import (
     ARCHIVE_DIR,
     Feature,
+    feature_to_dict,
     load_archive,
     load_feature_objects,
     load_features,
@@ -232,4 +233,96 @@ def generate_executor_briefing(
 
     if len(briefing) > _MAX_TOTAL_CHARS:
         briefing = briefing[:_MAX_TOTAL_CHARS] + "\n...（已截断）"
+    return briefing
+
+
+def generate_analyst_briefing(project_dir: Path, goal: str) -> str:
+    """生成 Analyst 上下文：用户目标 + 目录树 + 配置文件。
+
+    不包含归档信息（分析阶段不关心历史）。
+    """
+    tree = _dir_tree(project_dir, max_depth=2)
+    configs = _read_configs(project_dir)
+
+    briefing = f"""\
+## 用户目标
+{goal}
+
+## 项目目录结构
+```
+{tree}
+```
+
+## 配置文件
+{configs if configs else "（未找到标准配置文件）"}
+"""
+
+    if len(briefing) > _MAX_TOTAL_CHARS:
+        briefing = briefing[:_MAX_TOTAL_CHARS] + "\n...（已截断）"
+    return briefing
+
+
+def generate_e2e_briefing(project_dir: Path, feature: Feature) -> str:
+    """生成 E2E 测试简报：feature 详情 + dev.sh + 项目树。
+
+    提供 feature 的完整信息，以及如何启动项目。
+    """
+    steps_text = ""
+    for i, s in enumerate(feature.steps):
+        marker = "x" if s.done else " "
+        evidence = f" | {s.evidence}" if s.evidence else ""
+        steps_text += f"  [{marker}] {i}: {s.description}{evidence}\n"
+
+    vc_text = "\n".join(f"  {cmd}" for cmd in feature.verify_commands)
+    tree = _dir_tree(project_dir, max_depth=2)
+    dev_sh = _read_dev_sh(project_dir)
+
+    briefing = f"""\
+## Feature: {feature.id}
+标题: {feature.title}
+类型: {feature.type}
+
+## 步骤
+{steps_text}
+## verify_commands（已全部通过）
+{vc_text}
+
+## 项目启动方式（dev.sh）
+{dev_sh}
+
+## 项目结构
+```
+{tree}
+```
+
+## 提醒
+- 你是 E2E 测试专员，只负责测试，不要修改代码
+- 机械验证已经通过（编译 + 单元测试），现在需要验证功能逻辑
+- 测试完成后在最后一行输出 E2E_PASSED / E2E_FAILED / E2E_BLOCKED
+"""
+
+    if len(briefing) > _MAX_TOTAL_CHARS:
+        briefing = briefing[:_MAX_TOTAL_CHARS] + "\n...（已截断）"
+    return briefing
+
+
+def generate_judge_briefing(feature: Feature, e2e_output: str) -> str:
+    """生成规划师判定简报：feature 定义 + E2E 失败详情。"""
+    import json as _json
+    feature_json = _json.dumps(feature_to_dict(feature), indent=2, ensure_ascii=False)
+
+    briefing = f"""\
+## Feature: {feature.id}
+标题: {feature.title}
+
+## Feature 定义
+```json
+{feature_json}
+```
+
+## E2E 测试失败详情
+```
+{e2e_output[-3000:] if len(e2e_output) > 3000 else e2e_output}
+```
+"""
     return briefing

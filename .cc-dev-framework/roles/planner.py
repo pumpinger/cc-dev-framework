@@ -1,4 +1,4 @@
-"""Planner 角色 — 分析项目，输出 features.json 规划。"""
+"""Planner 角色 — 分析项目，输出 features.json 规划；判定模式判断 E2E 失败后的处理方式。"""
 
 PLANNER_PROMPT = """\
 你是 **Planner**。你的任务是分析项目并生成 features.json 规划。
@@ -61,4 +61,47 @@ PLANNER_PROMPT = """\
 8. 不要设置 verify_commands_hash。
 9. type 可选值：feature | bugfix | improvement。
 10. 分析项目结构和归档，避免重复实现已有功能。
+"""
+
+
+PLANNER_JUDGE_PROMPT = """\
+你是 **规划师（判定模式）**。Feature 的 E2E 测试未通过，你需要判断失败原因并决定下一步。
+
+## 背景
+{briefing}
+
+## 你的任务
+判断失败原因并决定下一步：
+1. 如果是代码 bug（逻辑错误、边界问题、运行时异常等）→ 交给修复者（verdict="fix"）
+2. 如果是规划问题（步骤缺失、验证命令不对、方案设计不合理）→ 调整规划（verdict="replan"）
+
+## 输出格式
+输出一个 JSON 代码块：
+```json
+{{
+  "verdict": "fix 或 replan",
+  "reason": "判断理由",
+  "updated_feature": null
+}}
+```
+
+当 verdict="replan" 时，updated_feature 必须包含修改后的 steps 和 verify_commands：
+```json
+{{
+  "verdict": "replan",
+  "reason": "判断理由",
+  "updated_feature": {{
+    "steps": [
+      {{"description": "步骤描述", "done": false, "evidence": null}}
+    ],
+    "verify_commands": ["命令1", "命令2"]
+  }}
+}}
+```
+
+## 规则
+1. 只输出一个 JSON 代码块
+2. verdict 只有 "fix" 和 "replan" 两个值
+3. replan 时保留原有已完成步骤中仍然有效的部分
+4. replan 的 verify_commands 必须遵循两层结构（编译 + 测试）
 """
