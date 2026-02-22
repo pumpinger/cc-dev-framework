@@ -24,7 +24,7 @@ cc-dev-framework/               ← 仓库根目录
     ├── dev.sh                  ← 项目启动命令（project-setup 填写）
     ├── features.json           ← 功能规划数据
     ├── progress.json           ← 会话进度记录
-    ├── main.log                ← 运行日志（每次运行清空）
+    ├── session.log             ← 运行日志（每次运行清空）
     ├── roles/                  ← AI 角色（prompt 模板）
     │   ├── analyst.py          ← Analyst prompt 模板（需求分析）
     │   ├── planner.py          ← Planner prompt 模板（规划 + 判定模式）
@@ -100,7 +100,7 @@ verify-fix 和 E2E-judge **分开计数**，各自有独立的 max_retries。
 ## 日志系统
 
 - `utils/log.py` 提供 `setup_logging()` + `get_logger()`
-- 日志文件：`.cc-dev-framework/main.log`，每次运行 `mode="w"` 清空
+- 日志文件：`.cc-dev-framework/session.log`，每次运行 `mode="w"` 清空
 - 格式：`[2026-02-22 14:30:05] [INFO] main: 消息`
 - main.py 在 `main()` 开头调 `setup_logging()`，所有关键操作同时 print + logger
 
@@ -132,4 +132,4 @@ verify-fix 和 E2E-judge **分开计数**，各自有独立的 max_retries。
 - 改了 `verify.py` 的输出格式，需同步更新 `main.py` 的 `extract_verify_errors()` 正则
 - 改了 E2E tester 的输出标记，需同步更新 `main.py` 的 `_parse_e2e_result()` 解析
 - 改了 planner judge 的 JSON 格式，需同步更新 `main.py` 的 `_apply_replan()` 解析
-- `.cc-dev-framework/main.log` 已加入 `.gitignore`（`*.log` 规则覆盖），不提交到仓库
+- `.cc-dev-framework/session.log` 已加入 `.gitignore`（`*.log` 规则覆盖），不提交到仓库

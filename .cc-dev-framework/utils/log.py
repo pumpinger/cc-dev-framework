@@ -1,4 +1,4 @@
-"""日志模块 — 结构化日志输出到 main.log。
+"""日志模块 — 结构化日志输出到 session.log。
 
 Usage:
     from log import setup_logging, get_logger
@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 
 FRAMEWORK_DIR = Path(__file__).parent.parent  # .cc-dev-framework/
-LOG_PATH = FRAMEWORK_DIR / "main.log"
+LOG_PATH = FRAMEWORK_DIR / "session.log"
 
 _initialized = False
 
@@ -21,7 +21,7 @@ _initialized = False
 def setup_logging() -> None:
     """初始化日志。在 main.py 启动时调用一次。
 
-    写入 .cc-dev-framework/main.log，mode='w'（每次运行清空）。
+    写入 .cc-dev-framework/session.log，mode='w'（每次运行清空）。
     格式: [2026-02-22 14:30:05] [INFO] main: 消息
     """
     global _initialized

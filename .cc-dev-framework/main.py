@@ -323,6 +323,7 @@ def run_init() -> bool:
     output = (proc.stdout + proc.stderr).strip()
     if output:
         for line in output.split("\n"):
+            print(f"  [init.sh] {line}")
             logger.info("[init.sh] %s", line)
     if proc.returncode != 0:
         msg = "错误: init.sh 执行失败"
@@ -1348,16 +1349,21 @@ def _run_e2e_tester(feature: Feature) -> tuple[str, str]:
 
     result = call_claude(
         prompt,
-        max_turns=20,
+        max_turns=30,
         system_append=system_note,
         stream=True,
     )
 
     output = result.get("result", "")
+
     if result.get("is_error"):
         msg = "Claude E2E Tester 返回了非零退出码"
         print(f"[main] {msg}")
         logger.error(msg)
+        # Still try to parse — the marker may have been output before the error
+        parsed_result, parsed_detail = _parse_e2e_result(output)
+        if parsed_result != "blocked":
+            return parsed_result, parsed_detail
         return "blocked", "E2E Tester 进程异常退出"
 
     return _parse_e2e_result(output)

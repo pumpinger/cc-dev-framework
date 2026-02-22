@@ -116,7 +116,7 @@ my-project/
 │   ├── dev.sh                  ← 项目启动命令（project-setup 填写）
 │   ├── features.json           ← 功能规划数据
 │   ├── progress.json           ← 会话记录
-│   ├── main.log                ← 运行日志（自动生成，每次清空）
+│   ├── session.log             ← 运行日志（自动生成，每次清空）
 │   ├── roles/                  ← AI 角色（prompt 模板）
 │   │   ├── analyst.py
 │   │   ├── planner.py
@@ -195,7 +195,7 @@ python .cc-dev-framework/main.py --auto-approve --goal "..."
 
 ## 日志
 
-每次运行会生成日志文件 `.cc-dev-framework/main.log`（每次运行清空）。
+每次运行会生成日志文件 `.cc-dev-framework/session.log`（每次运行清空）。
 
 日志记录：
 - 每个阶段的开始/结束
@@ -207,7 +207,7 @@ python .cc-dev-framework/main.py --auto-approve --goal "..."
 出问题时先查日志：
 
 ```bash
-cat .cc-dev-framework/main.log
+cat .cc-dev-framework/session.log
 ```
 
 ## 中文输出
