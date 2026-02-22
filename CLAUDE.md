@@ -25,19 +25,19 @@ cc-dev-framework/               ← 仓库根目录
     ├── features.json           ← 功能规划数据
     ├── progress.json           ← 会话进度记录
     ├── main.log                ← 运行日志（每次运行清空）
-    ├── roles/                  ← AI 角色 + 验证
+    ├── roles/                  ← AI 角色（prompt 模板）
     │   ├── planner.py          ← Planner prompt 模板
     │   ├── executor.py         ← Executor prompt 模板
-    │   ├── fixer.py            ← Fixer prompt 模板
-    │   ├── verify.py           ← 4 项门禁（steps_done, evidence, commands, branch）
-    │   └── validate_plan.py    ← 规划质量检查（8 项）
-    ├── src/                    ← 框架业务逻辑
+    │   └── fixer.py            ← Fixer prompt 模板
+    ├── src/                    ← 框架业务逻辑 + 验证
     │   ├── store.py            ← 数据模型 + features.json 原子读写
     │   ├── briefing.py         ← 上下文压缩，注入项目信息给 Claude
     │   ├── start.py            ← 建 feature 分支 + 设 in_progress
     │   ├── step.py             ← Executor 调用：标记步骤完成 + 写证据
     │   ├── complete.py         ← commit → merge → 标记 completed
-    │   └── archive.py          ← 归档已完成 feature 到 vN.json
+    │   ├── archive.py          ← 归档已完成 feature 到 vN.json
+    │   ├── verify.py           ← 4 项门禁（steps_done, evidence, commands, branch）
+    │   └── validate_plan.py    ← 规划质量检查（8 项）
     └── utils/                  ← 通用工具（与框架业务无关）
         └── log.py              ← 日志模块（setup_logging + get_logger）
 ```

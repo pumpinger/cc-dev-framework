@@ -18,7 +18,7 @@ if sys.platform == "win32":
 sys.path.insert(0, str(Path(__file__).parent))
 from store import get_feature, update_feature_field, PROJECT_DIR
 
-VERIFY_SCRIPT = Path(__file__).parent.parent / "roles" / "verify.py"
+VERIFY_SCRIPT = Path(__file__).parent / "verify.py"
 
 
 def _run(cmd, **kwargs):

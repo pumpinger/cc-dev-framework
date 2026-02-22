@@ -30,7 +30,6 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-# Imports from core/ and roles/
 FRAMEWORK_DIR = Path(__file__).parent
 sys.path.insert(0, str(FRAMEWORK_DIR / "src"))
 sys.path.insert(0, str(FRAMEWORK_DIR / "roles"))
@@ -901,7 +900,7 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
         print(f"\n[main] {msg}")
         logger.info(msg)
 
-        rc, verify_output = run_script_capture("roles/verify.py", "-f", feature.id)
+        rc, verify_output = run_script_capture("src/verify.py", "-f", feature.id)
         print(verify_output)
 
         if rc == 0:

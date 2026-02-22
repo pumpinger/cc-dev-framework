@@ -97,19 +97,19 @@ my-project/
 │   ├── features.json           ← 功能规划数据
 │   ├── progress.json           ← 会话记录
 │   ├── main.log                ← 运行日志（自动生成，每次清空）
-│   ├── roles/                  ← AI 角色 + 验证
+│   ├── roles/                  ← AI 角色（prompt 模板）
 │   │   ├── planner.py
 │   │   ├── executor.py
-│   │   ├── fixer.py
-│   │   ├── verify.py
-│   │   └── validate_plan.py
-│   ├── src/                    ← 框架业务逻辑
+│   │   └── fixer.py
+│   ├── src/                    ← 框架业务逻辑 + 验证
 │   │   ├── store.py
 │   │   ├── briefing.py
 │   │   ├── start.py
 │   │   ├── step.py
 │   │   ├── complete.py
-│   │   └── archive.py
+│   │   ├── archive.py
+│   │   ├── verify.py
+│   │   └── validate_plan.py
 │   └── utils/                  ← 通用工具
 │       └── log.py
 ├── (你的项目代码，由 Claude 生成)

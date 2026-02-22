@@ -1,7 +1,7 @@
-"""Feature store — data model + atomic JSON read/write for features.json.
+"""数据存储 — 数据模型 + features.json 原子读写。
 
-Self-contained module, no external dependencies.
-Used by verify.py and status.py in the same directory.
+无外部依赖，自包含模块。
+被 src/ 下其他脚本和 main.py / status.py 引用。
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ FEATURES_PATH = FRAMEWORK_DIR / "features.json"
 ARCHIVE_DIR = FRAMEWORK_DIR / "archive"
 
 
-# --- Data Model ---
+# --- 数据模型 ---
 
 @dataclass
 class Step:
@@ -101,10 +101,10 @@ class Feature:
         )
 
 
-# --- Read/Write ---
+# --- 读写 ---
 
 def load_features(path: Path = FEATURES_PATH) -> dict:
-    """Load features.json, return raw dict with project/goal/features."""
+    """加载 features.json，返回包含 project/goal/features 的原始 dict。"""
     if not path.exists():
         return {"project": "", "goal": "", "features": []}
     with open(path, encoding="utf-8") as f:
@@ -112,13 +112,13 @@ def load_features(path: Path = FEATURES_PATH) -> dict:
 
 
 def load_feature_objects(path: Path = FEATURES_PATH) -> list[Feature]:
-    """Load features.json, return list of Feature objects."""
+    """加载 features.json，返回 Feature 对象列表。"""
     raw = load_features(path)
     return [Feature.from_dict(fd) for fd in raw.get("features", [])]
 
 
 def save_features(data: dict, path: Path = FEATURES_PATH) -> None:
-    """Atomic write: temp file + rename."""
+    """原子写入：临时文件 + rename。"""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(
         dir=str(path.parent), suffix=".tmp", prefix="features_"
@@ -139,7 +139,7 @@ def save_features(data: dict, path: Path = FEATURES_PATH) -> None:
 
 
 def get_feature(feature_id: str, path: Path = FEATURES_PATH) -> Feature | None:
-    """Get a single feature by ID."""
+    """按 ID 获取单个 feature。"""
     for f in load_feature_objects(path):
         if f.id == feature_id:
             return f
@@ -147,7 +147,7 @@ def get_feature(feature_id: str, path: Path = FEATURES_PATH) -> Feature | None:
 
 
 def update_evidence(feature_id: str, evidence: DoneEvidence, path: Path = FEATURES_PATH) -> None:
-    """Update done_evidence for a feature and save."""
+    """更新 feature 的 done_evidence 并保存。"""
     raw = load_features(path)
     for fd in raw.get("features", []):
         if fd["id"] == feature_id:
@@ -157,7 +157,7 @@ def update_evidence(feature_id: str, evidence: DoneEvidence, path: Path = FEATUR
 
 
 def update_feature_field(feature_id: str, path: Path = FEATURES_PATH, **kwargs) -> bool:
-    """Update arbitrary fields on a feature dict and save. Returns True if found."""
+    """更新 feature 的任意字段并保存。找到返回 True。"""
     raw = load_features(path)
     for fd in raw.get("features", []):
         if fd["id"] == feature_id:
@@ -169,7 +169,7 @@ def update_feature_field(feature_id: str, path: Path = FEATURES_PATH, **kwargs) 
 
 def update_step(feature_id: str, step_index: int, done: bool, evidence: str | None,
                 path: Path = FEATURES_PATH) -> bool:
-    """Mark a step done/undone with evidence. Returns True if found."""
+    """标记步骤完成/未完成，附带证据。找到返回 True。"""
     raw = load_features(path)
     for fd in raw.get("features", []):
         if fd["id"] == feature_id:
@@ -200,17 +200,17 @@ def feature_to_dict(f: Feature) -> dict:
     return d
 
 
-# --- Archive ---
+# --- 归档 ---
 
 def list_archives(archive_dir: Path = ARCHIVE_DIR) -> list[str]:
-    """List archived version files like ['v1.json', 'v2.json']."""
+    """列出归档版本文件，如 ['v1.json', 'v2.json']。"""
     if not archive_dir.exists():
         return []
     return sorted(f.name for f in archive_dir.glob("v*.json"))
 
 
 def next_version(archive_dir: Path = ARCHIVE_DIR) -> str:
-    """Determine next version number based on existing archives."""
+    """根据现有归档确定下一个版本号。"""
     archives = list_archives(archive_dir)
     if not archives:
         return "v1"
@@ -220,7 +220,7 @@ def next_version(archive_dir: Path = ARCHIVE_DIR) -> str:
 
 
 def load_archive(version: str, archive_dir: Path = ARCHIVE_DIR) -> dict:
-    """Load an archived version file."""
+    """加载归档版本文件。"""
     path = archive_dir / f"{version}.json"
     if not path.exists():
         return {"version": version, "features": []}

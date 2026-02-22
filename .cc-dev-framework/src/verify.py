@@ -1,6 +1,6 @@
 """门禁检查 — 脚本驱动的 feature 完成验证。
 
-Usage: python .cc-dev-framework/roles/verify.py -f <feature-id>
+Usage: python .cc-dev-framework/src/verify.py -f <feature-id>
 
 检查 4 个门禁（全部机械检查，无 AI 判断）：
   1. steps_done        — 所有步骤都标记完成？
@@ -25,8 +25,7 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
-# Import from core/
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
 from store import (
     DoneEvidence,
     GateCheck,
