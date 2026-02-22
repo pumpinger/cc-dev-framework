@@ -1049,7 +1049,7 @@ def _complete_feature(feature: Feature, e2e_result: str, e2e_detail: str) -> boo
         msg = f"警告: complete.py 对 {feature.id} 执行失败"
         print(f"[main] {msg}")
         logger.error(msg)
-        update_feature_field(feature.id, error="complete.py 执行失败")
+        update_feature_field(feature.id, status="failed", error="complete.py 执行失败")
         return False
     logger.info("feature %s 完成", feature.id)
     return True
