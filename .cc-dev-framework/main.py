@@ -308,9 +308,14 @@ def run_init() -> bool:
     msg = "正在运行 init.sh..."
     print(f"[main] {msg}")
     logger.info(msg)
-    # Use as_posix() so bash gets forward-slash path on Windows
+    # Use relative path from PROJECT_DIR to avoid WSL bash failing on
+    # absolute Windows paths like "D:/cc/..." which it can't resolve.
+    try:
+        rel_path = init_script.relative_to(PROJECT_DIR)
+    except ValueError:
+        rel_path = init_script
     proc = subprocess.run(
-        ["bash", init_script.as_posix()],
+        ["bash", rel_path.as_posix()],
         cwd=str(PROJECT_DIR),
         capture_output=True,
         encoding="utf-8", errors="replace",
