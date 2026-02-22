@@ -44,7 +44,7 @@ from briefing import (
 from log import get_logger, setup_logging
 from planner import PLANNER_PROMPT
 from executor import EXECUTOR_PROMPT
-from fixer import FIX_PROMPT
+from fixer import FIX_PROMPT, FIX_E2E_PROMPT
 from preparer import PREPARER_PROMPT
 from e2e_tester import E2E_TESTER_PROMPT
 from store import (
@@ -402,8 +402,8 @@ def _parse_e2e_result(output: str) -> tuple[str, str]:
             detail = stripped[len("E2E_FAILED:"):].strip()
             return "failed", detail
 
-    # No marker found — treat as skipped
-    return "skipped", "E2E 测试未输出结果标记"
+    # No marker found — treat as failed (not skipped)
+    return "failed", "E2E 测试未输出结果标记"
 
 
 # ===================================================================
@@ -955,83 +955,11 @@ def _execute_feature(feature: Feature, max_retries: int, max_e2e_retries: int) -
     # Run executor for the first time
     _run_executor(feature)
 
-    # --- Verify + retry loop ---
-    verify_passed = False
-    for attempt in range(1, max_retries + 1):
-        msg = f"验证尝试 {attempt}/{max_retries}: {feature.id}"
-        print(f"\n[main] {msg}")
-        logger.info(msg)
-
-        rc, verify_output = run_script_capture("src/verify.py", "-f", feature.id)
-        print(verify_output)
-
-        if rc == 0:
-            verify_passed = True
-            msg = f"验证通过: {feature.id}"
-            print(f"\n[main] {msg}")
-            logger.info(msg)
-            break
-
-        # GATE FAILED — analyse which gates failed
-        errors = extract_verify_errors(verify_output)
-        msg = f"验证失败: {errors['summary']}"
-        print(f"[main] {msg}")
-        logger.error(msg)
-        for g in errors["failed_gates"]:
-            print(f"  [FAIL] {g}")
-            logger.error("  [FAIL] %s", g)
-
-        if attempt >= max_retries:
-            break
-
-        # Decide: re-run executor (steps incomplete) or fixer (code broken)
-        failed_gate_names = {g.split(":")[0].strip() for g in errors["failed_gates"]}
-        steps_incomplete = "steps_done" in failed_gate_names or "steps_evidence" in failed_gate_names
-
-        if steps_incomplete:
-            # Steps not done — re-run executor to continue from where it left off
-            msg = "步骤未完成 — 重新运行 Executor..."
-            print(f"[main] {msg}")
-            logger.info(msg)
-            # Reload feature to get fresh step status
-            feature = get_feature(feature.id)
-            if feature is None:
-                msg = f"错误: feature 已消失"
-                print(f"[main] {msg}")
-                logger.error(msg)
-                return False
-            _run_executor(feature)
-        else:
-            # verify_commands or other failures — run fixer
-            msg = "代码问题 — 运行 Fixer..."
-            print(f"[main] {msg}")
-            logger.info(msg)
-            _run_fixer(feature, verify_output)
-
-    if not verify_passed:
-        # Verify retries exhausted
-        msg = f"验证在 {max_retries} 次重试后仍失败"
-        logger.error(msg)
+    # --- Verify + retry loop (unified — single implementation) ---
+    if not _run_verify_loop(feature, max_retries):
         update_feature_field(feature.id, status="failed",
                              error=f"验证在 {max_retries} 次重试后仍失败")
         return False
-
-    # --- E2E testing ---
-    # project-setup 是基础设施 feature，没有可验证的功能逻辑，跳过 E2E
-    if feature.id == "project-setup":
-        msg = f"E2E 无需: {feature.id}（基础设施 feature，跳过 E2E 测试）"
-        print(f"\n[main] {msg}")
-        logger.info(msg)
-        commit_msg = f"feat({feature.id}): {feature.title}"
-        rc = run_script("src/complete.py", "-f", feature.id, "-m", commit_msg)
-        if rc != 0:
-            msg = f"警告: complete.py 对 {feature.id} 执行失败"
-            print(f"[main] {msg}")
-            logger.error(msg)
-            update_feature_field(feature.id, error="complete.py 执行失败")
-            return False
-        logger.info("feature %s 完成", feature.id)
-        return True
 
     # --- E2E testing loop ---
     for e2e_attempt in range(1, max_e2e_retries + 1):
@@ -1039,7 +967,7 @@ def _execute_feature(feature: Feature, max_retries: int, max_e2e_retries: int) -
         print(f"\n[main] {msg}")
         logger.info(msg)
 
-        e2e_result, e2e_detail = _run_e2e_tester(feature)
+        e2e_result, e2e_detail, e2e_output = _run_e2e_tester(feature)
 
         if e2e_result in ("passed", "skipped"):
             label = "通过" if e2e_result == "passed" else "无需"
@@ -1049,7 +977,7 @@ def _execute_feature(feature: Feature, max_retries: int, max_e2e_retries: int) -
             logger.info(msg)
             # Complete the feature
             commit_msg = f"feat({feature.id}): {feature.title}"
-            rc = run_script("src/complete.py", "-f", feature.id, "-m", commit_msg)
+            rc = run_script("src/complete.py", "-f", feature.id, "-m", commit_msg, "--skip-verify")
             if rc != 0:
                 msg = f"警告: complete.py 对 {feature.id} 执行失败"
                 print(f"[main] {msg}")
@@ -1075,7 +1003,7 @@ def _execute_feature(feature: Feature, max_retries: int, max_e2e_retries: int) -
             logger.error(msg)
             return False
 
-        _run_fixer(feature, f"E2E 测试失败:\n{e2e_detail}")
+        _run_fixer_e2e(feature, e2e_output)
 
         # Re-verify after fix (fixer may have changed code)
         if not _run_verify_loop(feature, max_retries):
@@ -1128,8 +1056,11 @@ def _run_verify_loop(feature: Feature, max_retries: int) -> bool:
     return False
 
 
-def _run_executor(feature: Feature) -> None:
-    """Call Claude executor to implement feature steps."""
+def _run_executor(feature: Feature) -> bool:
+    """Call Claude executor to implement feature steps.
+
+    Returns True on success, False if Claude returned an error.
+    """
     # Reload to get current step status
     fresh = get_feature(feature.id)
     if fresh is not None:
@@ -1146,7 +1077,7 @@ def _run_executor(feature: Feature) -> None:
         msg = f"{feature.id} 所有步骤已完成"
         print(f"[main] {msg}")
         logger.info(msg)
-        return
+        return True
 
     done_count = sum(1 for s in feature.steps if s.done)
     total = len(feature.steps)
@@ -1178,6 +1109,8 @@ def _run_executor(feature: Feature) -> None:
         logger.error(msg)
         update_feature_field(feature.id, error="Executor 出错")
         # Don't mark failed — verify loop will assess the situation
+        return False
+    return True
 
 
 def _run_fixer(feature: Feature, verify_output: str) -> None:
@@ -1209,11 +1142,40 @@ def _run_fixer(feature: Feature, verify_output: str) -> None:
         logger.error(msg)
 
 
-def _run_e2e_tester(feature: Feature) -> tuple[str, str]:
+def _run_fixer_e2e(feature: Feature, e2e_output: str) -> None:
+    """Call Claude fixer to repair code based on E2E test failure."""
+    vc_text = "\n".join(f"  {cmd}" for cmd in feature.verify_commands)
+
+    prompt = FIX_E2E_PROMPT.format(
+        feature_id=feature.id,
+        feature_title=feature.title,
+        e2e_output=e2e_output,
+        verify_commands=vc_text,
+    )
+    system_note = (
+        "你由编排器 以 fix 模式调用。"
+        "修复 E2E 测试失败的问题，使功能正确工作。"
+        "不要运行 verify.py / complete.py，不要修改 verify_commands。"
+    )
+
+    logger.info("运行 Fixer (E2E): %s", feature.id)
+    result = call_claude(
+        prompt,
+        max_turns=20,
+        system_append=system_note,
+    )
+
+    if result.get("is_error"):
+        msg = "Claude Fixer (E2E) 返回了非零退出码"
+        print(f"[main] {msg}")
+        logger.error(msg)
+
+
+def _run_e2e_tester(feature: Feature) -> tuple[str, str, str]:
     """Run E2E tester for a feature.
 
     Returns:
-        (result, detail) where result is "passed", "skipped", or "failed".
+        (result, detail, full_output) where result is "passed", "skipped", or "failed".
     """
     # Reload feature
     fresh = get_feature(feature.id)
@@ -1245,9 +1207,9 @@ def _run_e2e_tester(feature: Feature) -> tuple[str, str]:
         print(f"[main] {msg}")
         logger.error(msg)
         # Still try to parse — the marker may have been output before the error
-        return _parse_e2e_result(output)
+        return *_parse_e2e_result(output), output
 
-    return _parse_e2e_result(output)
+    return *_parse_e2e_result(output), output
 
 
 # ===================================================================

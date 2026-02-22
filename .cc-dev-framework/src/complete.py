@@ -38,6 +38,8 @@ def main():
     parser = argparse.ArgumentParser(description="完成 feature")
     parser.add_argument("-f", "--feature", required=True, help="Feature ID")
     parser.add_argument("-m", "--message", required=True, help="提交信息")
+    parser.add_argument("--skip-verify", action="store_true",
+                        help="跳过验证（编排器已验证）")
     args = parser.parse_args()
 
     feature = get_feature(args.feature)
@@ -47,16 +49,17 @@ def main():
 
     branch = f"feature/{args.feature}"
 
-    # 1. Run verify
-    print(f"=== 验证: {args.feature} ===")
-    rc, out = _run([sys.executable, str(VERIFY_SCRIPT), "-f", args.feature])
-    print(out)
-    if rc != 0:
-        print("\n验证失败。请修复问题后重试。")
-        sys.exit(1)
+    # 1. Run verify (unless skipped by orchestrator)
+    if not args.skip_verify:
+        print(f"=== 验证: {args.feature} ===")
+        rc, out = _run([sys.executable, str(VERIFY_SCRIPT), "-f", args.feature])
+        print(out)
+        if rc != 0:
+            print("\n验证失败。请修复问题后重试。")
+            sys.exit(1)
 
-    # Re-read feature after verify (verify writes done_evidence)
-    feature = get_feature(args.feature)
+        # Re-read feature after verify (verify writes done_evidence)
+        feature = get_feature(args.feature)
 
     # 2. Git add + commit
     print(f"\n=== 提交 ===")

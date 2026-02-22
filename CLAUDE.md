@@ -36,7 +36,7 @@ cc-dev-framework/               ← 仓库根目录
     │   ├── briefing.py         ← 上下文压缩，注入项目信息给 Claude
     │   ├── start.py            ← 建 feature 分支 + 设 in_progress
     │   ├── step.py             ← Executor 调用：标记步骤完成 + 写证据
-    │   ├── complete.py         ← commit → merge → 标记 completed
+    │   ├── complete.py         ← commit → merge → 标记 completed（支持 --skip-verify）
     │   ├── archive.py          ← 归档已完成 feature 到 vN.json
     │   ├── verify.py           ← 4 项门禁（steps_done, evidence, commands, branch）
     │   └── validate_plan.py    ← 规划质量检查（8 项）
@@ -51,7 +51,7 @@ cc-dev-framework/               ← 仓库根目录
 | Preparer | `roles/preparer.py` | 主动准备需求物料，转换不友好格式，分析 MCP 工具需求 |
 | Planner | `roles/planner.py` | 分析项目，输出 features.json 规划 |
 | Executor | `roles/executor.py` | 按步骤实现代码 |
-| Fixer | `roles/fixer.py` | 根据验证错误修复代码 |
+| Fixer | `roles/fixer.py` | 根据验证错误或 E2E 失败修复代码（FIX_PROMPT + FIX_E2E_PROMPT） |
 | E2E Tester | `roles/e2e_tester.py` | 端到端验证功能正确性 |
 
 ## 工作流（main.py 的 6 个阶段）
@@ -66,7 +66,7 @@ INIT → RESUME → PREPARE → PLAN → EXECUTE → ARCHIVE
 | RESUME | 检测 in_progress feature，断点恢复 |
 | PREPARE | Claude (Preparer) 准备需求物料 → 转换格式 → 分析 MCP 工具 → 输出结构化需求给 Planner |
 | PLAN | Claude (Planner) 分析项目 → 输出 features.json → validate_plan 检查 → 用户审批 |
-| EXECUTE | 按 priority 逐个 feature：start → executor → [verify ←→ fix] → [e2e_test ←→ fix] → complete |
+| EXECUTE | 按 priority 逐个 feature：start → executor → [verify ←→ fix] → [e2e_test ←→ fix] → complete（所有 feature 统一走 E2E，E2E Tester 自行判断是否跳过） |
 | ARCHIVE | 所有 feature 完成后归档到 archive/vN.json |
 
 ### EXECUTE 内部 per-feature 流程
@@ -78,9 +78,11 @@ start → executor → [verify ←→ fix] → [e2e_test ←→ fix] → complet
 E2E 测试三种结果：
 1. **E2E_PASSED** → complete
 2. **E2E_SKIPPED**（无法测试或无需测试）→ complete
-3. **E2E_FAILED** → Fixer 修复 → 重新 verify → 重新 E2E
+3. **E2E_FAILED** → Fixer（E2E 专用 prompt，含完整 E2E 输出）修复 → 重新 verify → 重新 E2E
+4. **无标记输出** → 视为 E2E_FAILED
 
 verify-fix 和 E2E-fix **分开计数**，各自有独立的 max_retries。
+E2E 修复使用 `FIX_E2E_PROMPT`（`roles/fixer.py`），传入完整 E2E 输出而非摘要。
 
 ## init.sh 与 dev.sh
 
@@ -128,4 +130,6 @@ verify-fix 和 E2E-fix **分开计数**，各自有独立的 max_retries。
 - 新增脚本时：放 `src/`（框架逻辑）或 `utils/`（通用工具），确保 sys.path 正确
 - 改了 `verify.py` 的输出格式，需同步更新 `main.py` 的 `extract_verify_errors()` 正则
 - 改了 E2E tester 的输出标记，需同步更新 `main.py` 的 `_parse_e2e_result()` 解析
+- `complete.py` 由编排器调用时传 `--skip-verify`（编排器已验证过），独立使用时仍自带验证
+- `_run_fixer_e2e()` 使用 `FIX_E2E_PROMPT`，接收完整 E2E 输出；`_run_fixer()` 使用 `FIX_PROMPT`，接收 verify 输出
 - `.cc-dev-framework/session.log` 已加入 `.gitignore`（`*.log` 规则覆盖），不提交到仓库
