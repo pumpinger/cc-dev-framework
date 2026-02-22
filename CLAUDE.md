@@ -46,14 +46,14 @@ cc-dev-framework/               ← 仓库根目录
 
 ## 角色说明
 
-| 角色 | 文件 | 模式 | 职责 |
-|------|------|------|------|
-| Analyst | `roles/analyst.py` | stream=False (JSON) | 分析需求资料是否充足，输出结构化需求 |
-| Planner | `roles/planner.py` | stream=False (JSON) | 分析项目，输出 features.json 规划 |
-| Planner (Judge) | `roles/planner.py` | stream=False (JSON) | E2E 失败后判定：fix 还是 replan |
-| Executor | `roles/executor.py` | stream=True | 按步骤实现代码 |
-| Fixer | `roles/fixer.py` | stream=True | 根据验证错误修复代码 |
-| E2E Tester | `roles/e2e_tester.py` | stream=True | 端到端验证功能正确性 |
+| 角色 | 文件 | 职责 |
+|------|------|------|
+| Analyst | `roles/analyst.py` | 分析需求资料是否充足，输出结构化需求 |
+| Planner | `roles/planner.py` | 分析项目，输出 features.json 规划 |
+| Planner (Judge) | `roles/planner.py` | E2E 失败后判定：fix 还是 replan |
+| Executor | `roles/executor.py` | 按步骤实现代码 |
+| Fixer | `roles/fixer.py` | 根据验证错误修复代码 |
+| E2E Tester | `roles/e2e_tester.py` | 端到端验证功能正确性 |
 
 ## 工作流（main.py 的 6 个阶段）
 
@@ -92,10 +92,10 @@ verify-fix 和 E2E-judge **分开计数**，各自有独立的 max_retries。
 - 两者都是模板文件，由 Planner 规划的 `project-setup` feature 中由 Executor 填写
 - Planner prompt 规则第 6 条要求首轮迭代的 project-setup 同时填写这两个文件
 
-## call_claude() 的两种模式
+## call_claude() 统一流式输出
 
-- `stream=False`（Planner/Analyst/Judge 用）：`stdout=PIPE` 捕获 JSON 输出解析，stderr 流到终端
-- `stream=True`（Executor/Fixer/E2E Tester 用）：`Popen` + tee，逐行读取并同时打印到终端、写入日志、收集到 result
+所有角色统一使用 `Popen` + tee 模式：逐行读取并同时打印到终端、写入日志、收集到 result。
+用户可以实时看到每个角色的工作过程。需要 JSON 的调用方（Analyst/Planner/Judge）通过 `_extract_json_from_output()` 从收集到的文本中提取 JSON。
 
 ## 日志系统
 

@@ -96,14 +96,11 @@ def call_claude(
     max_turns: int = 10,
     allowed_tools: str | None = None,
     system_append: str | None = None,
-    stream: bool = False,
 ) -> dict:
     """Call Claude Code in print mode.
 
-    Args:
-        stream: If False (Planner), capture stdout for JSON parsing and let
-                stderr flow to terminal. If True (Executor/Fixer), use Popen
-                to tee output: print to terminal + write to log + collect result.
+    Always streams output to terminal in real-time (Popen + tee).
+    Callers that need JSON should use _extract_json_from_output() on result.
 
     Returns dict with keys: result, cost, duration, is_error
     """
@@ -112,9 +109,6 @@ def call_claude(
         "-p", prompt,
         "--max-turns", str(max_turns),
     ]
-
-    if not stream:
-        cmd.extend(["--output-format", "json"])
 
     if allowed_tools:
         cmd.extend(["--allowedTools", allowed_tools])
@@ -129,73 +123,49 @@ def call_claude(
     env.pop("CLAUDE_CODE", None)
     env.pop("CLAUDECODE", None)
 
-    mode_label = "stream" if stream else "json"
-    msg = f"正在调用 Claude (max_turns={max_turns}, {mode_label})..."
+    msg = f"正在调用 Claude (max_turns={max_turns})..."
     print(f"[main] {msg}")
     logger.info(msg)
 
     try:
-        if stream:
-            # Popen + tee: print to terminal, write to log, collect output
-            proc = subprocess.Popen(
-                cmd,
-                cwd=str(PROJECT_DIR),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                env=env,
-            )
-            collected_lines: list[str] = []
-            try:
-                for raw_line in proc.stdout:
-                    try:
-                        line = raw_line.decode("utf-8", errors="replace")
-                    except Exception:
-                        line = str(raw_line)
-                    sys.stdout.write(line)
-                    sys.stdout.flush()
-                    stripped = line.rstrip("\n\r")
-                    if stripped:
-                        logger.info("[claude] %s", stripped)
-                    collected_lines.append(line)
-                proc.wait(timeout=CLAUDE_TIMEOUT)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-                logger.error("Claude 超时 (%ds)", CLAUDE_TIMEOUT)
-                return {
-                    "result": "".join(collected_lines),
-                    "cost": None,
-                    "duration": CLAUDE_TIMEOUT,
-                    "is_error": True,
-                    "error": f"Claude 超时 ({CLAUDE_TIMEOUT}s)",
-                }
-
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(PROJECT_DIR),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+        )
+        collected_lines: list[str] = []
+        try:
+            for raw_line in proc.stdout:
+                try:
+                    line = raw_line.decode("utf-8", errors="replace")
+                except Exception:
+                    line = str(raw_line)
+                sys.stdout.write(line)
+                sys.stdout.flush()
+                stripped = line.rstrip("\n\r")
+                if stripped:
+                    logger.info("[claude] %s", stripped)
+                collected_lines.append(line)
+            proc.wait(timeout=CLAUDE_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            logger.error("Claude 超时 (%ds)", CLAUDE_TIMEOUT)
             return {
                 "result": "".join(collected_lines),
                 "cost": None,
-                "duration": 0,
-                "is_error": proc.returncode != 0,
+                "duration": CLAUDE_TIMEOUT,
+                "is_error": True,
+                "error": f"Claude 超时 ({CLAUDE_TIMEOUT}s)",
             }
-        else:
-            # Capture stdout for JSON parsing; let stderr flow to terminal
-            proc = subprocess.run(
-                cmd,
-                cwd=str(PROJECT_DIR),
-                stdout=subprocess.PIPE,
-                timeout=CLAUDE_TIMEOUT,
-                encoding="utf-8",
-                errors="replace",
-                env=env,
-            )
-    except subprocess.TimeoutExpired:
-        msg = f"Claude 超时 ({CLAUDE_TIMEOUT}s)"
-        logger.error(msg)
+
         return {
-            "result": "",
+            "result": "".join(collected_lines),
             "cost": None,
-            "duration": CLAUDE_TIMEOUT,
-            "is_error": True,
-            "error": msg,
+            "duration": 0,
+            "is_error": proc.returncode != 0,
         }
     except FileNotFoundError:
         msg = "找不到 claude 命令。请确认 Claude Code CLI 已安装。"
@@ -206,44 +176,6 @@ def call_claude(
             "duration": 0,
             "is_error": True,
             "error": msg,
-        }
-
-    # Parse JSON output (only reached when stream=False)
-    raw = proc.stdout
-    logger.info("Claude 返回 (exit=%d, %d chars)", proc.returncode, len(raw))
-    if raw:
-        logger.debug("Claude 原始输出: %s", raw[:2000])
-
-    if proc.returncode != 0:
-        msg = f"Claude 退出码 {proc.returncode}"
-        logger.error(msg)
-        return {
-            "result": raw,
-            "cost": None,
-            "duration": 0,
-            "is_error": True,
-            "error": msg,
-        }
-
-    try:
-        data = json.loads(raw)
-        cost = data.get("cost_usd")
-        if cost is not None:
-            logger.info("Claude 花费: $%.4f", cost)
-        return {
-            "result": data.get("result", ""),
-            "cost": cost,
-            "duration": data.get("duration_ms", 0),
-            "is_error": data.get("is_error", False),
-        }
-    except json.JSONDecodeError:
-        # Non-JSON output — return raw text
-        logger.warning("Claude 输出不是 JSON，返回原始文本")
-        return {
-            "result": raw,
-            "cost": None,
-            "duration": 0,
-            "is_error": False,
         }
 
 
@@ -1283,7 +1215,6 @@ def _run_executor(feature: Feature) -> None:
         prompt,
         max_turns=30,
         system_append=system_note,
-        stream=True,
     )
 
     if result.get("is_error"):
@@ -1315,7 +1246,6 @@ def _run_fixer(feature: Feature, verify_output: str) -> None:
         prompt,
         max_turns=20,
         system_append=system_note,
-        stream=True,
     )
 
     if result.get("is_error"):
@@ -1351,7 +1281,6 @@ def _run_e2e_tester(feature: Feature) -> tuple[str, str]:
         prompt,
         max_turns=30,
         system_append=system_note,
-        stream=True,
     )
 
     output = result.get("result", "")
