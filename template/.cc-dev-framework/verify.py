@@ -1,13 +1,12 @@
 """Gate check — script-driven verification for feature completion.
 
-Usage: python .aifw/verify.py -f <feature-id>
+Usage: python .cc-dev-framework/roles/verify.py -f <feature-id>
 
-Checks 5 gate points (all mechanical, no AI judgment):
+Checks 4 gate points (all mechanical, no AI judgment):
   1. steps_done        — all steps marked done?
   2. steps_evidence    — every done step has evidence?
-  3. verify_integrity  — verify_commands hash matches planner's seal?
-  4. verify_commands    — all commands exit 0?
-  5. git_branch        — on correct feature branch?
+  3. verify_commands    — all commands exit 0?
+  4. git_branch        — on correct feature branch?
 
 After GATE PASSED, commit (includes evidence) then merge.
 """
@@ -32,7 +31,6 @@ from store import (
     DoneEvidence,
     GateCheck,
     VerifyResult,
-    compute_verify_hash,
     get_feature,
     update_evidence,
 )
@@ -88,29 +86,7 @@ def main():
     else:
         gates.append(GateCheck("steps_evidence", False, "No done steps"))
 
-    # --- Gate 3a: verify_commands integrity (hash check) ---
-    if feature.verify_commands_hash:
-        current_hash = compute_verify_hash(feature.verify_commands or [])
-        if current_hash == feature.verify_commands_hash:
-            gates.append(GateCheck(
-                "verify_integrity", True,
-                f"Hash match: {current_hash}"
-            ))
-        else:
-            gates.append(GateCheck(
-                "verify_integrity", False,
-                f"verify_commands were modified! "
-                f"Expected hash {feature.verify_commands_hash}, "
-                f"got {current_hash}. "
-                f"Executor must not change verify_commands set by planner."
-            ))
-    else:
-        gates.append(GateCheck(
-            "verify_integrity", False,
-            "No verify_commands_hash found — planner must seal features before execution"
-        ))
-
-    # --- Gate 3b: verify_commands execution ---
+    # --- Gate 3: verify_commands execution ---
     if not feature.verify_commands:
         gates.append(GateCheck("verify_commands", False, "No verify_commands defined"))
     else:

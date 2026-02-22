@@ -66,7 +66,7 @@ Structure:
 (fill init.sh with dependency install + smoke test).
 7. verify_commands must specify exact test files to create \
 (e.g. `pytest tests/test_add.py -x`, NOT `pytest`).
-8. Do NOT set verify_commands_hash — the orchestrator seals it.
+8. Do NOT set verify_commands_hash.
 9. Types: feature | bugfix | improvement.
 10. Analyse the project structure and archives to avoid duplicating \
 already-implemented features.
@@ -89,7 +89,7 @@ You are the **Executor**. Implement the feature described below.
 3. Do NOT run verify.py, complete.py, or archive.py — the orchestrator \
 handles verification.
 4. Do NOT modify features.json directly.
-5. Do NOT modify verify_commands (they are hash-locked).
+5. Do NOT modify verify_commands.
 6. Write the test files specified in verify_commands as deliverables.
 7. Focus only on this feature. Do not work on other features.
 8. After finishing ALL steps, output exactly: EXECUTOR_DONE
@@ -108,7 +108,7 @@ Fix the code so all verify_commands pass.
 ## Failed verification output
 {verify_errors}
 
-## verify_commands (DO NOT modify these — they are hash-locked)
+## verify_commands (DO NOT modify these)
 {verify_commands}
 
 ## Rules

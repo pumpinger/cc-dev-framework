@@ -189,7 +189,7 @@ Priority: {feature.priority}
 
 ## Steps
 {steps_text}
-## verify_commands (hash-locked — DO NOT modify)
+## verify_commands (DO NOT modify)
 {vc_text}
 
 ## Project structure

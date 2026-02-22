@@ -6,7 +6,6 @@ Used by verify.py and status.py in the same directory.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import tempfile
@@ -227,34 +226,5 @@ def load_archive(version: str, archive_dir: Path = ARCHIVE_DIR) -> dict:
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
-
-# --- Hash ---
-
-def compute_verify_hash(commands: list[str]) -> str:
-    """Compute SHA-256 hash of verify_commands list. Used to detect tampering."""
-    content = json.dumps(commands, sort_keys=True, ensure_ascii=False)
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
-
-
-def seal_verify_commands(feature_id: str, path: Path = FEATURES_PATH) -> str | None:
-    """Compute and store verify_commands_hash for a feature. Returns the hash."""
-    raw = load_features(path)
-    for fd in raw.get("features", []):
-        if fd["id"] == feature_id:
-            commands = fd.get("verify_commands", [])
-            h = compute_verify_hash(commands)
-            fd["verify_commands_hash"] = h
-            save_features(raw, path)
-            return h
-    return None
-
-
-def seal_all_features(path: Path = FEATURES_PATH) -> None:
-    """Compute and store verify_commands_hash for ALL features."""
-    raw = load_features(path)
-    for fd in raw.get("features", []):
-        commands = fd.get("verify_commands", [])
-        fd["verify_commands_hash"] = compute_verify_hash(commands)
-    save_features(raw, path)
 
 

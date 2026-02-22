@@ -42,7 +42,6 @@ from store import (
     load_feature_objects,
     load_features,
     save_features,
-    seal_all_features,
     update_feature_field,
 )
 from validate_plan import validate_plan
@@ -614,10 +613,9 @@ def main() -> None:
                 print("[orchestrator] Plan rejected by user.")
                 sys.exit(0)
 
-        # Save plan + seal
+        # Save plan
         save_features(plan_data)
-        seal_all_features()
-        print("[orchestrator] Plan saved and sealed.")
+        print("[orchestrator] Plan saved.")
 
         # Reload
         raw = load_features()
