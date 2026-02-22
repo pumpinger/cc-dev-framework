@@ -1,6 +1,6 @@
-"""Context compression — generate focused briefings for Claude Code calls.
+"""上下文压缩 — 为 Claude Code 调用生成聚焦的简报。
 
-Replaces multi-turn exploration with a single context injection (~3000 tokens).
+用单次上下文注入（~3000 tokens）替代多轮探索。
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def _dir_tree(project_dir: Path, max_depth: int = 3) -> str:
     _walk(project_dir, "", 0)
     tree = "\n".join(lines)
     if len(tree) > _MAX_TREE_CHARS:
-        tree = tree[:_MAX_TREE_CHARS] + "\n... (truncated)"
+        tree = tree[:_MAX_TREE_CHARS] + "\n...（已截断）"
     return tree
 
 
@@ -85,7 +85,7 @@ def _read_configs(project_dir: Path) -> str:
             try:
                 content = path.read_text(encoding="utf-8", errors="replace")
                 if len(content) > 800:
-                    content = content[:800] + "\n... (truncated)"
+                    content = content[:800] + "\n...（已截断）"
                 parts.append(f"--- {name} ---\n{content}")
                 total += len(parts[-1])
                 if total > _MAX_CONFIG_CHARS:
@@ -103,14 +103,14 @@ def _archive_summary() -> str:
     """Summarize archived features to avoid re-planning them."""
     archives = list_archives()
     if not archives:
-        return "No previous iterations archived."
+        return "没有已归档的迭代。"
 
     lines: list[str] = []
     for a in archives:
         ver = a.replace(".json", "")
         data = load_archive(ver)
         feats = data.get("features", [])
-        lines.append(f"{ver}: {len(feats)} features")
+        lines.append(f"{ver}: {len(feats)} 个 feature")
         for f in feats:
             fid = f.get("id", "?")
             title = f.get("title", "?")
@@ -118,7 +118,7 @@ def _archive_summary() -> str:
 
     text = "\n".join(lines)
     if len(text) > _MAX_ARCHIVE_CHARS:
-        text = text[:_MAX_ARCHIVE_CHARS] + "\n... (truncated)"
+        text = text[:_MAX_ARCHIVE_CHARS] + "\n...（已截断）"
     return text
 
 
@@ -127,36 +127,36 @@ def _archive_summary() -> str:
 # ---------------------------------------------------------------------------
 
 def generate_planner_briefing(project_dir: Path, goal: str) -> str:
-    """Generate planner context: directory tree, configs, archive summary, rules.
+    """生成 Planner 上下文：目录树、配置文件、归档摘要、规则提醒。
 
-    Target: ~3000 tokens (~12000 chars).
+    目标：~3000 tokens（~12000 字符）。
     """
     tree = _dir_tree(project_dir)
     configs = _read_configs(project_dir)
     archive = _archive_summary()
 
     briefing = f"""\
-## Project directory structure
+## 项目目录结构
 ```
 {tree}
 ```
 
-## Config files
-{configs if configs else "(no standard config files found)"}
+## 配置文件
+{configs if configs else "（未找到标准配置文件）"}
 
-## Previous iterations (archived features — do NOT re-implement)
+## 历史迭代（已归档的 feature —— 不要重复实现）
 {archive}
 
-## Planning rules reminder
-- 2-8 features, 2-6 steps each
-- verify_commands: 2 layers (compile + test), specify exact test files
-- IDs: kebab-case, unique priorities
-- First iteration priority-1 = project-setup (init.sh)
-- Do NOT set verify_commands_hash
+## 规划规则提醒
+- 2-8 个 feature，每个 2-6 个步骤
+- verify_commands：两层（编译 + 测试），指定具体测试文件
+- ID：kebab-case，priority 唯一
+- 首轮迭代 priority-1 = project-setup（init.sh）
+- 不要设置 verify_commands_hash
 """
 
     if len(briefing) > _MAX_TOTAL_CHARS:
-        briefing = briefing[:_MAX_TOTAL_CHARS] + "\n... (truncated)"
+        briefing = briefing[:_MAX_TOTAL_CHARS] + "\n...（已截断）"
     return briefing
 
 
@@ -165,15 +165,15 @@ def generate_executor_briefing(
     feature: Feature,
     start_step: int = 0,
 ) -> str:
-    """Generate executor context: feature details, step status, directory tree.
+    """生成 Executor 上下文：feature 详情、步骤状态、目录树。
 
-    Target: ~3000 tokens (~12000 chars).
+    目标：~3000 tokens（~12000 字符）。
     """
     # Feature details
     steps_text = ""
     for i, s in enumerate(feature.steps):
         marker = "x" if s.done else " "
-        current = " <-- START HERE" if i == start_step and not s.done else ""
+        current = " <-- 从这里开始" if i == start_step and not s.done else ""
         evidence = f" | {s.evidence}" if s.evidence else ""
         steps_text += f"  [{marker}] {i}: {s.description}{evidence}{current}\n"
 
@@ -183,28 +183,28 @@ def generate_executor_briefing(
 
     briefing = f"""\
 ## Feature: {feature.id}
-Title: {feature.title}
-Type: {feature.type}
-Priority: {feature.priority}
+标题: {feature.title}
+类型: {feature.type}
+优先级: {feature.priority}
 
-## Steps
+## 步骤
 {steps_text}
-## verify_commands (DO NOT modify)
+## verify_commands（不要修改）
 {vc_text}
 
-## Project structure
+## 项目结构
 ```
 {tree}
 ```
 
-## Reminders
-- Run `python .cc-dev-framework/core/step.py -f {feature.id} -s <N> -e "evidence"` \
-after each step.
-- Do NOT run verify.py / complete.py / archive.py.
-- Write test files referenced in verify_commands.
-- Output EXECUTOR_DONE when all steps are finished.
+## 提醒
+- 每完成一个步骤后运行 \
+`python .cc-dev-framework/core/step.py -f {feature.id} -s <N> -e "完成证据"`。
+- 不要运行 verify.py / complete.py / archive.py。
+- 编写 verify_commands 中引用的测试文件。
+- 所有步骤完成后输出 EXECUTOR_DONE。
 """
 
     if len(briefing) > _MAX_TOTAL_CHARS:
-        briefing = briefing[:_MAX_TOTAL_CHARS] + "\n... (truncated)"
+        briefing = briefing[:_MAX_TOTAL_CHARS] + "\n...（已截断）"
     return briefing

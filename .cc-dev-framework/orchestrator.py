@@ -679,9 +679,8 @@ def main() -> None:
         # Call Claude for planning
         prompt = PLANNER_PROMPT.format(briefing=briefing, goal=goal)
         system_note = (
-            "You are called by an orchestrator. Output ONLY a JSON code block. "
-            "Do not run any scripts. Do not create files. Just output the plan JSON.\n"
-            "请用中文回复。"
+            "你由 orchestrator 调用。只输出一个 JSON 代码块。"
+            "不要运行任何脚本，不要创建文件，只输出规划 JSON。"
         )
         result = call_claude(
             prompt,
@@ -995,10 +994,9 @@ def _run_executor(feature: Feature) -> None:
         start_step=start_step,
     )
     system_note = (
-        "You are called by an orchestrator in executor mode. "
-        "Implement the feature steps. Use step.py to record progress. "
-        "Do NOT run verify.py / complete.py / archive.py.\n"
-        "请用中文回复。"
+        "你由 orchestrator 以 executor 模式调用。"
+        "按步骤实现功能，用 step.py 记录进度。"
+        "不要运行 verify.py / complete.py / archive.py。"
     )
 
     result = call_claude(
@@ -1027,10 +1025,9 @@ def _run_fixer(feature: Feature, verify_output: str) -> None:
         verify_commands=vc_text,
     )
     system_note = (
-        "You are called by an orchestrator in fix mode. "
-        "Fix the code so verify_commands pass. "
-        "Do NOT run verify.py / complete.py. Do NOT modify verify_commands.\n"
-        "请用中文回复。"
+        "你由 orchestrator 以 fix 模式调用。"
+        "修复代码使 verify_commands 全部通过。"
+        "不要运行 verify.py / complete.py，不要修改 verify_commands。"
     )
 
     logger.info("运行 Fixer: %s", feature.id)

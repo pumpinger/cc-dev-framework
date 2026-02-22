@@ -67,9 +67,10 @@ INIT → RESUME → PLAN → EXECUTE (循环: verify→fix) → ARCHIVE
 ## 中文化策略
 
 - 所有脚本的 print 输出为中文（用户可见部分）
-- `prompts.py`、`briefing.py` 保持英文（prompt 模板给 Claude 读）
+- `prompts.py` 三个 prompt 模板为中文（Claude 整个上下文都是中文，自然中文回复）
+- `briefing.py` 生成的简报为中文
+- orchestrator.py 的 4 个 `system_note` 为中文
 - `store.py` 无 print，不涉及
-- 4 个 `system_note` 追加 `请用中文回复。` 让 Claude 用中文回复用户
 - `[FAIL]`/`[PASS]` 标签保留英文（国际通用标记）
 - verify.py 输出中文后，orchestrator.py 的 `extract_verify_errors()` 正则已同步更新
 
