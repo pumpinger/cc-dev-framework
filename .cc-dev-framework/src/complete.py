@@ -90,26 +90,28 @@ def main():
     # 4. Merge
     print(f"\n=== 合并 {branch} -> {main_branch} ===")
 
-    # Stash any dirty files (e.g. session.log being written during execution)
+    # Stash any dirty files (e.g. session.log, crm.db written during execution).
+    # These are runtime artifacts — drop them after merge, don't restore.
+    # Restoring (pop) would leave dirty files on master that block the NEXT merge.
     _git("stash", "--include-untracked")
 
     rc, out = _git("checkout", main_branch)
     if rc != 0:
         print(f"git checkout {main_branch} 失败: {out}")
-        _git("stash", "pop")
+        _git("stash", "drop")
         sys.exit(1)
 
     rc, out = _git("merge", branch, "--no-edit")
     if rc != 0:
         print(f"git merge 失败: {out}")
-        _git("stash", "pop")
+        _git("stash", "drop")
         sys.exit(1)
 
     # 5. Delete branch
     _git("branch", "-d", branch)
 
-    # Restore stashed files
-    _git("stash", "pop")
+    # Drop stashed runtime artifacts (don't pop — avoids dirty files blocking next merge)
+    _git("stash", "drop")
 
     # 6. Update features.json
     update_feature_field(args.feature, status="completed", commit_hash=commit_hash)
