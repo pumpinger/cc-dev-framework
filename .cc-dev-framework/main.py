@@ -8,6 +8,7 @@ Usage:
 Options:
   --auto-approve     跳过规划审批（默认：询问用户）
   --max-retries N    每个 feature 验证失败后的最大重试次数（默认 3）
+  --max-e2e-retries N  E2E 测试最大重试次数（默认 2）
   --goal "text"      覆盖目标（否则从 features.json 或交互输入获取）
   --feature ID       只处理指定 feature
   --dry-run          只展示执行计划，不实际调用 Claude
@@ -34,11 +35,19 @@ FRAMEWORK_DIR = Path(__file__).parent
 sys.path.insert(0, str(FRAMEWORK_DIR / "src"))
 sys.path.insert(0, str(FRAMEWORK_DIR / "roles"))
 sys.path.insert(0, str(FRAMEWORK_DIR / "utils"))
-from briefing import generate_executor_briefing, generate_planner_briefing
+from briefing import (
+    generate_analyst_briefing,
+    generate_e2e_briefing,
+    generate_executor_briefing,
+    generate_judge_briefing,
+    generate_planner_briefing,
+)
 from log import get_logger, setup_logging
-from planner import PLANNER_PROMPT
+from planner import PLANNER_PROMPT, PLANNER_JUDGE_PROMPT
 from executor import EXECUTOR_PROMPT
 from fixer import FIX_PROMPT
+from analyst import ANALYST_PROMPT
+from e2e_tester import E2E_TESTER_PROMPT
 from store import (
     Feature,
     get_feature,
@@ -429,6 +438,36 @@ def extract_verify_errors(output: str) -> dict:
 
 
 # ===================================================================
+# E2E output parsing
+# ===================================================================
+
+def _parse_e2e_result(output: str) -> tuple[str, str]:
+    """Parse E2E tester output for result marker.
+
+    Scans the last 20 lines for E2E_PASSED / E2E_FAILED / E2E_BLOCKED.
+
+    Returns:
+        (result, detail) where result is "passed", "failed", or "blocked",
+        and detail is the reason text (empty for passed).
+    """
+    lines = output.strip().split("\n")
+    # Search from the end
+    for line in reversed(lines[-20:]):
+        stripped = line.strip()
+        if stripped == "E2E_PASSED":
+            return "passed", ""
+        if stripped.startswith("E2E_FAILED:"):
+            detail = stripped[len("E2E_FAILED:"):].strip()
+            return "failed", detail
+        if stripped.startswith("E2E_BLOCKED:"):
+            detail = stripped[len("E2E_BLOCKED:"):].strip()
+            return "blocked", detail
+
+    # No marker found — treat as blocked
+    return "blocked", "E2E 测试未输出结果标记"
+
+
+# ===================================================================
 # User interaction
 # ===================================================================
 
@@ -572,6 +611,8 @@ def main() -> None:
                         help="跳过规划审批")
     parser.add_argument("--max-retries", type=int, default=3,
                         help="每个 feature 验证失败后的最大重试次数（默认 3）")
+    parser.add_argument("--max-e2e-retries", type=int, default=2,
+                        help="E2E 测试最大重试次数（默认 2）")
     parser.add_argument("--goal", type=str, default=None,
                         help="覆盖项目目标")
     parser.add_argument("--feature", type=str, default=None,
@@ -642,13 +683,13 @@ def main() -> None:
             done = sum(1 for s in resume_feature.steps if s.done)
             print(f"  [dry-run] 将恢复 {resume_feature.id}，从步骤 {done} 开始")
             return
-        _execute_feature(resume_feature, args.max_retries)
+        _execute_feature(resume_feature, args.max_retries, args.max_e2e_retries)
         # After resuming, fall through to process remaining features
         raw = load_features()
         all_features = [Feature.from_dict(fd) for fd in raw.get("features", [])]
 
     # ---------------------------------------------------------------
-    # 阶段 3: 规划（如有需要）
+    # 阶段 3: 需求分析
     # ---------------------------------------------------------------
     pending = [f for f in all_features if f.status == "pending"]
     need_planning = len(all_features) == 0 or (
@@ -656,13 +697,12 @@ def main() -> None:
         and all_features[0].id == "example-feature"
     )
 
-    if need_planning:
-        print()
-        print("[阶段 3] 正在规划...")
-        logger.info("=== 阶段 3: 规划 ===")
+    # Analyst + Planner only needed when planning is required
+    goal = args.goal
+    analyzed_requirements = None
 
-        # Get goal
-        goal = args.goal
+    if need_planning:
+        # Get goal first (needed for analyst)
         if not goal:
             goal = raw.get("goal", "")
         if not goal:
@@ -671,15 +711,79 @@ def main() -> None:
                 return
             goal = prompt_user_goal()
 
+        print()
+        print("[阶段 3] 正在分析需求...")
+        logger.info("=== 阶段 3: 需求分析 ===")
+
+        if args.dry_run:
+            print(f"  [dry-run] 将调用 Analyst 分析需求，目标: {goal}")
+        else:
+            analyst_briefing = generate_analyst_briefing(PROJECT_DIR, goal)
+            analyst_prompt = ANALYST_PROMPT.format(briefing=analyst_briefing)
+            system_note = (
+                "你是需求分析者。仔细检查所有引用的资料是否可以访问。"
+                "只输出一个 JSON 代码块。"
+            )
+            result = call_claude(
+                analyst_prompt,
+                max_turns=10,
+                allowed_tools="Read,Glob,Grep",
+                system_append=system_note,
+            )
+
+            if result.get("is_error"):
+                msg = f"错误: Analyst 调用失败: {result.get('error', result.get('result', ''))}"
+                print(f"[main] {msg}")
+                logger.error(msg)
+                sys.exit(1)
+
+            analysis = _extract_json_from_output(result["result"])
+
+            if analysis is None:
+                # Analyst failed to produce JSON — log warning but continue with original goal
+                msg = "警告: 无法从 Analyst 输出中提取 JSON，使用原始目标继续。"
+                print(f"[main] {msg}")
+                logger.warning(msg)
+                analyzed_requirements = goal
+            elif analysis.get("status") == "needs_human":
+                print()
+                print("=" * 60)
+                print("  [分析] 需求资料不足，需要人类补充：")
+                print("=" * 60)
+                for item in analysis.get("missing", []):
+                    print(f"  - {item}")
+                for mat in analysis.get("materials", []):
+                    if not mat.get("accessible"):
+                        print(f"  - {mat['name']}: {mat.get('notes', '无法访问')}")
+                print()
+                logger.error("需求分析结果: needs_human")
+                sys.exit(1)
+            else:
+                analyzed_requirements = analysis.get("requirements", goal)
+                summary = analysis.get("summary", "")
+                msg = f"需求分析完成: {summary}"
+                print(f"[main] {msg}")
+                logger.info(msg)
+
+        # -----------------------------------------------------------
+        # 阶段 4: 规划
+        # -----------------------------------------------------------
+        print()
+        print("[阶段 4] 正在规划...")
+        logger.info("=== 阶段 4: 规划 ===")
+
         if args.dry_run:
             print(f"  [dry-run] 将调用 Claude Planner，目标: {goal}")
             return
 
+        # Use analyzed requirements if available, otherwise original goal
+        planner_goal = analyzed_requirements if analyzed_requirements else goal
+
         # Generate briefing
-        briefing = generate_planner_briefing(PROJECT_DIR, goal)
+        briefing = generate_planner_briefing(PROJECT_DIR, planner_goal)
 
         # Call Claude for planning
-        prompt = PLANNER_PROMPT.format(briefing=briefing, goal=goal)
+        prompt = PLANNER_PROMPT.format(briefing=briefing, goal=planner_goal)
         system_note = (
             "你由编排器 调用。只输出一个 JSON 代码块。"
             "不要运行任何脚本，不要创建文件，只输出规划 JSON。"
@@ -784,13 +888,13 @@ def main() -> None:
         pending = [f for f in all_features if f.status == "pending"]
 
     # ---------------------------------------------------------------
-    # 阶段 4: 执行
+    # 阶段 5: 执行
     # ---------------------------------------------------------------
     if not pending and not resume_feature:
         completed_count = sum(1 for f in all_features if f.status == "completed")
         if completed_count == len(all_features) and all_features:
             print()
-            print("[阶段 5] 所有 feature 已完成！")
+            print("[阶段 6] 所有 feature 已完成！")
             logger.info("所有 feature 已完成")
         else:
             msg = "没有待执行的 feature。"
@@ -800,8 +904,8 @@ def main() -> None:
     else:
         print()
         msg = f"正在执行 {len(pending)} 个待处理 feature..."
-        print(f"[阶段 4] {msg}")
-        logger.info("=== 阶段 4: 执行 (%d 个 feature) ===", len(pending))
+        print(f"[阶段 5] {msg}")
+        logger.info("=== 阶段 5: 执行 (%d 个 feature) ===", len(pending))
 
         # Sort by priority
         pending.sort(key=lambda f: f.priority)
@@ -820,12 +924,13 @@ def main() -> None:
                 for i, s in enumerate(f.steps):
                     print(f"    {i}: {s.description}")
                 print(f"    验证命令: {', '.join(f.verify_commands)}")
+            print("  [dry-run] 每个 feature 执行后将进行 E2E 测试")
             return
 
         for feature in pending:
-            success = _execute_feature(feature, args.max_retries)
+            success = _execute_feature(feature, args.max_retries, args.max_e2e_retries)
             if not success:
-                msg = f"Feature {feature.id} 在 {args.max_retries} 次重试后仍失败，停止执行。"
+                msg = f"Feature {feature.id} 执行失败，停止执行。"
                 print(f"[main] {msg}")
                 logger.error(msg)
                 _save_progress(
@@ -836,7 +941,7 @@ def main() -> None:
                 sys.exit(1)
 
     # ---------------------------------------------------------------
-    # 阶段 5: 归档
+    # 阶段 6: 归档
     # ---------------------------------------------------------------
     raw = load_features()
     all_features = [Feature.from_dict(fd) for fd in raw.get("features", [])]
@@ -844,8 +949,8 @@ def main() -> None:
 
     if completed and len(completed) == len(all_features):
         print()
-        print("[阶段 5] 正在归档已完成的 feature...")
-        logger.info("=== 阶段 5: 归档 ===")
+        print("[阶段 6] 正在归档已完成的 feature...")
+        logger.info("=== 阶段 6: 归档 ===")
         run_script("src/archive.py")
 
     # ---------------------------------------------------------------
@@ -866,12 +971,17 @@ def main() -> None:
 # Feature execution
 # ===================================================================
 
-def _execute_feature(feature: Feature, max_retries: int) -> bool:
-    """Execute a single feature: start -> code -> verify loop.
+def _execute_feature(feature: Feature, max_retries: int, max_e2e_retries: int) -> bool:
+    """Execute a single feature: start -> code -> verify loop -> E2E loop.
 
     The verify loop distinguishes two failure modes:
       - steps_done failure -> re-run Executor to complete remaining steps
       - verify_commands failure -> run Fixer to repair code
+
+    After verify passes, runs E2E testing loop:
+      - E2E_PASSED -> complete
+      - E2E_BLOCKED -> mark failed, need human
+      - E2E_FAILED -> Planner judge decides fix or replan
 
     Returns True on success, False if retries exhausted.
     """
@@ -894,7 +1004,8 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
     # Run executor for the first time
     _run_executor(feature)
 
-    # Verify + retry loop
+    # --- Verify + retry loop ---
+    verify_passed = False
     for attempt in range(1, max_retries + 1):
         msg = f"验证尝试 {attempt}/{max_retries}: {feature.id}"
         print(f"\n[main] {msg}")
@@ -904,20 +1015,11 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
         print(verify_output)
 
         if rc == 0:
-            # GATE PASSED — complete the feature
+            verify_passed = True
             msg = f"验证通过: {feature.id}"
             print(f"\n[main] {msg}")
             logger.info(msg)
-            commit_msg = f"feat({feature.id}): {feature.title}"
-            rc = run_script("src/complete.py", "-f", feature.id, "-m", commit_msg)
-            if rc != 0:
-                msg = f"警告: complete.py 对 {feature.id} 执行失败"
-                print(f"[main] {msg}")
-                logger.error(msg)
-                update_feature_field(feature.id, error="complete.py 执行失败")
-                return False
-            logger.info("feature %s 完成", feature.id)
-            return True
+            break
 
         # GATE FAILED — analyse which gates failed
         errors = extract_verify_errors(verify_output)
@@ -943,7 +1045,7 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
             # Reload feature to get fresh step status
             feature = get_feature(feature.id)
             if feature is None:
-                msg = f"错误: feature {feature} 已消失"
+                msg = f"错误: feature 已消失"
                 print(f"[main] {msg}")
                 logger.error(msg)
                 return False
@@ -955,11 +1057,157 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
             logger.info(msg)
             _run_fixer(feature, verify_output)
 
-    # Retries exhausted
-    msg = f"验证在 {max_retries} 次重试后仍失败"
+    if not verify_passed:
+        # Verify retries exhausted
+        msg = f"验证在 {max_retries} 次重试后仍失败"
+        logger.error(msg)
+        update_feature_field(feature.id, status="failed",
+                             error=f"验证在 {max_retries} 次重试后仍失败")
+        return False
+
+    # --- E2E testing loop ---
+    for e2e_attempt in range(1, max_e2e_retries + 1):
+        msg = f"E2E 测试尝试 {e2e_attempt}/{max_e2e_retries}: {feature.id}"
+        print(f"\n[main] {msg}")
+        logger.info(msg)
+
+        e2e_result, e2e_detail = _run_e2e_tester(feature)
+
+        if e2e_result == "passed":
+            msg = f"E2E 测试通过: {feature.id}"
+            print(f"\n[main] {msg}")
+            logger.info(msg)
+            # Complete the feature
+            commit_msg = f"feat({feature.id}): {feature.title}"
+            rc = run_script("src/complete.py", "-f", feature.id, "-m", commit_msg)
+            if rc != 0:
+                msg = f"警告: complete.py 对 {feature.id} 执行失败"
+                print(f"[main] {msg}")
+                logger.error(msg)
+                update_feature_field(feature.id, error="complete.py 执行失败")
+                return False
+            logger.info("feature %s 完成", feature.id)
+            return True
+
+        if e2e_result == "blocked":
+            msg = f"E2E 测试受阻: {e2e_detail}"
+            print(f"\n[main] {msg}")
+            logger.error(msg)
+            update_feature_field(feature.id, status="failed",
+                                 error=f"E2E 测试受阻: {e2e_detail}")
+            return False
+
+        # E2E failed — run planner judge
+        msg = f"E2E 测试失败: {e2e_detail}"
+        print(f"\n[main] {msg}")
+        logger.error(msg)
+
+        if e2e_attempt >= max_e2e_retries:
+            break
+
+        # Reload feature for judge
+        feature = get_feature(feature.id)
+        if feature is None:
+            msg = "错误: feature 已消失"
+            print(f"[main] {msg}")
+            logger.error(msg)
+            return False
+
+        judge = _run_planner_judge(feature, e2e_detail)
+
+        if judge is None:
+            msg = "警告: 规划师判定失败，默认执行 fix"
+            print(f"[main] {msg}")
+            logger.warning(msg)
+            judge = {"verdict": "fix"}
+
+        verdict = judge.get("verdict", "fix")
+        reason = judge.get("reason", "")
+        msg = f"规划师判定: {verdict} — {reason}"
+        print(f"[main] {msg}")
+        logger.info(msg)
+
+        if verdict == "replan":
+            # Apply replan and re-execute
+            updated_feature = judge.get("updated_feature")
+            if updated_feature:
+                _apply_replan(feature.id, updated_feature)
+                msg = f"已应用 replan，重新执行 {feature.id}"
+                print(f"[main] {msg}")
+                logger.info(msg)
+
+            # Reload and re-run executor
+            feature = get_feature(feature.id)
+            if feature is None:
+                msg = "错误: feature 已消失"
+                print(f"[main] {msg}")
+                logger.error(msg)
+                return False
+            _run_executor(feature)
+
+            # Re-verify after replan
+            if not _run_verify_loop(feature, max_retries):
+                msg = f"replan 后验证仍失败: {feature.id}"
+                print(f"[main] {msg}")
+                logger.error(msg)
+                update_feature_field(feature.id, status="failed",
+                                     error="replan 后验证失败")
+                return False
+        else:
+            # Fix mode — run fixer with E2E error details
+            _run_fixer(feature, f"E2E 测试失败:\n{e2e_detail}")
+
+            # Re-verify after fix (fixer may have changed code)
+            if not _run_verify_loop(feature, max_retries):
+                msg = f"E2E fix 后验证失败: {feature.id}"
+                print(f"[main] {msg}")
+                logger.error(msg)
+                update_feature_field(feature.id, status="failed",
+                                     error="E2E fix 后验证失败")
+                return False
+
+    # E2E retries exhausted
+    msg = f"E2E 测试在 {max_e2e_retries} 次重试后仍失败"
+    print(f"[main] {msg}")
     logger.error(msg)
     update_feature_field(feature.id, status="failed",
-                         error=f"验证在 {max_retries} 次重试后仍失败")
+                         error=f"E2E 测试在 {max_e2e_retries} 次重试后仍失败")
+    return False
+
+
+def _run_verify_loop(feature: Feature, max_retries: int) -> bool:
+    """Run verify + fix loop. Returns True if verify passes."""
+    for attempt in range(1, max_retries + 1):
+        msg = f"验证尝试 {attempt}/{max_retries}: {feature.id}"
+        print(f"\n[main] {msg}")
+        logger.info(msg)
+
+        rc, verify_output = run_script_capture("src/verify.py", "-f", feature.id)
+        print(verify_output)
+
+        if rc == 0:
+            msg = f"验证通过: {feature.id}"
+            print(f"\n[main] {msg}")
+            logger.info(msg)
+            return True
+
+        if attempt >= max_retries:
+            break
+
+        # Reload feature
+        fresh = get_feature(feature.id)
+        if fresh is not None:
+            feature = fresh
+
+        errors = extract_verify_errors(verify_output)
+        failed_gate_names = {g.split(":")[0].strip() for g in errors["failed_gates"]}
+        steps_incomplete = "steps_done" in failed_gate_names or "steps_evidence" in failed_gate_names
+
+        if steps_incomplete:
+            _run_executor(feature)
+        else:
+            _run_fixer(feature, verify_output)
+
     return False
 
 
@@ -1044,6 +1292,102 @@ def _run_fixer(feature: Feature, verify_output: str) -> None:
         msg = "Claude Fixer 返回了非零退出码"
         print(f"[main] {msg}")
         logger.error(msg)
+
+
+def _run_e2e_tester(feature: Feature) -> tuple[str, str]:
+    """Run E2E tester for a feature.
+
+    Returns:
+        (result, detail) where result is "passed", "failed", or "blocked".
+    """
+    # Reload feature
+    fresh = get_feature(feature.id)
+    if fresh is not None:
+        feature = fresh
+
+    msg = f"E2E 测试: {feature.id} ({feature.title})"
+    print(f"[main] {msg}")
+    logger.info(msg)
+
+    briefing = generate_e2e_briefing(PROJECT_DIR, feature)
+    prompt = E2E_TESTER_PROMPT.format(briefing=briefing)
+    system_note = (
+        "你由编排器 以 E2E 测试模式调用。"
+        "执行端到端功能测试，不要修改代码。"
+        "完成后在最后一行输出 E2E_PASSED / E2E_FAILED / E2E_BLOCKED。"
+    )
+
+    result = call_claude(
+        prompt,
+        max_turns=20,
+        system_append=system_note,
+        stream=True,
+    )
+
+    output = result.get("result", "")
+    if result.get("is_error"):
+        msg = "Claude E2E Tester 返回了非零退出码"
+        print(f"[main] {msg}")
+        logger.error(msg)
+        return "blocked", "E2E Tester 进程异常退出"
+
+    return _parse_e2e_result(output)
+
+
+def _run_planner_judge(feature: Feature, e2e_output: str) -> dict | None:
+    """Run planner in judge mode to decide fix or replan.
+
+    Returns:
+        {"verdict": "fix"|"replan", "reason": "...", "updated_feature": ...} or None on failure.
+    """
+    msg = f"规划师判定: {feature.id}"
+    print(f"[main] {msg}")
+    logger.info(msg)
+
+    briefing = generate_judge_briefing(feature, e2e_output)
+    prompt = PLANNER_JUDGE_PROMPT.format(briefing=briefing)
+    system_note = (
+        "你由编排器 以判定模式调用。"
+        "分析 E2E 测试失败原因，输出 JSON 判定。"
+        "只输出一个 JSON 代码块。"
+    )
+
+    result = call_claude(
+        prompt,
+        max_turns=10,
+        allowed_tools="Read,Glob,Grep",
+        system_append=system_note,
+    )
+
+    if result.get("is_error"):
+        msg = "Claude 规划师判定失败"
+        print(f"[main] {msg}")
+        logger.error(msg)
+        return None
+
+    return _extract_json_from_output(result["result"])
+
+
+def _apply_replan(feature_id: str, updated_feature: dict) -> None:
+    """Apply planner's replan result to features.json.
+
+    Updates steps and verify_commands for the specified feature.
+    Resets undone steps' done/evidence fields.
+    """
+    raw = load_features()
+    for fd in raw.get("features", []):
+        if fd["id"] == feature_id:
+            if "steps" in updated_feature:
+                fd["steps"] = updated_feature["steps"]
+            if "verify_commands" in updated_feature:
+                fd["verify_commands"] = updated_feature["verify_commands"]
+            # Reset verify hash since commands may have changed
+            fd["verify_commands_hash"] = None
+            break
+    save_features(raw)
+    msg = f"Replan 已应用到 {feature_id}"
+    print(f"[main] {msg}")
+    logger.info(msg)
 
 
 # ===================================================================
