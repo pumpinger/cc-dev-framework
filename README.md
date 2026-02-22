@@ -95,6 +95,7 @@ my-project/
 │   ├── init.sh                 ← 环境初始化（自动被 Planner 填充）
 │   ├── features.json           ← 功能规划数据
 │   ├── progress.json           ← 会话记录
+│   ├── orchestrator.log        ← 运行日志（自动生成，每次清空）
 │   ├── roles/                  ← AI 角色 + 验证
 │   │   ├── prompts.py
 │   │   ├── briefing.py
@@ -102,6 +103,7 @@ my-project/
 │   │   └── validate_plan.py
 │   └── core/                   ← 基础设施
 │       ├── store.py
+│       ├── log.py
 │       ├── start.py
 │       ├── step.py
 │       ├── complete.py
@@ -155,6 +157,27 @@ python .cc-dev-framework/orchestrator.py --auto-approve --goal "..."
 | steps_evidence | 每个步骤有完成证据 |
 | verify_commands | 编译/测试命令全部 exit 0 |
 | git_branch | 在正确的 feature 分支上 |
+
+## 日志
+
+每次运行 orchestrator 会生成日志文件 `.cc-dev-framework/orchestrator.log`（每次运行清空）。
+
+日志记录：
+- 每个阶段的开始/结束
+- Claude 调用参数和返回状态
+- stream 模式下 Claude 的完整输出
+- 子脚本执行结果
+- 错误和警告详情
+
+出问题时先查日志：
+
+```bash
+cat .cc-dev-framework/orchestrator.log
+```
+
+## 中文输出
+
+框架所有终端输出均为中文。Claude 的回复也会以中文呈现（通过 `--append-system-prompt` 注入中文指令）。
 
 ## 平台支持
 

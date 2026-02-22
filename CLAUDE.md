@@ -23,6 +23,7 @@ cc-dev-framework/               ← 仓库根目录
     ├── init.sh                 ← 项目初始化模板
     ├── features.json           ← 功能规划数据
     ├── progress.json           ← 会话进度记录
+    ├── orchestrator.log        ← 运行日志（每次运行清空）
     ├── roles/                  ← AI 角色 + 验证
     │   ├── prompts.py          ← Planner/Executor/Fixer prompt 模板
     │   ├── briefing.py         ← 上下文压缩，注入项目信息给 Claude
@@ -30,6 +31,7 @@ cc-dev-framework/               ← 仓库根目录
     │   └── validate_plan.py    ← 规划质量检查（8 项）
     └── core/                   ← 基础设施
         ├── store.py            ← 数据模型 + features.json 原子读写
+        ├── log.py              ← 日志模块（setup_logging + get_logger）
         ├── start.py            ← 建 feature 分支 + 设 in_progress
         ├── step.py             ← Executor 调用：标记步骤完成 + 写证据
         ├── complete.py         ← commit → merge → 标记 completed
@@ -53,7 +55,23 @@ INIT → RESUME → PLAN → EXECUTE (循环: verify→fix) → ARCHIVE
 ## call_claude() 的两种模式
 
 - `stream=False`（Planner 用）：`stdout=PIPE` 捕获 JSON 输出解析，stderr 流到终端
-- `stream=True`（Executor/Fixer 用）：stdout+stderr 都继承，用户实时看到 Claude 工作
+- `stream=True`（Executor/Fixer 用）：`Popen` + tee，逐行读取并同时打印到终端、写入日志、收集到 result
+
+## 日志系统
+
+- `core/log.py` 提供 `setup_logging()` + `get_logger()`
+- 日志文件：`.cc-dev-framework/orchestrator.log`，每次运行 `mode="w"` 清空
+- 格式：`[2026-02-22 14:30:05] [INFO] orchestrator: 消息`
+- orchestrator.py 在 `main()` 开头调 `setup_logging()`，所有关键操作同时 print + logger
+
+## 中文化策略
+
+- 所有脚本的 print 输出为中文（用户可见部分）
+- `prompts.py`、`briefing.py` 保持英文（prompt 模板给 Claude 读）
+- `store.py` 无 print，不涉及
+- 4 个 `system_note` 追加 `请用中文回复。` 让 Claude 用中文回复用户
+- `[FAIL]`/`[PASS]` 标签保留英文（国际通用标记）
+- verify.py 输出中文后，orchestrator.py 的 `extract_verify_errors()` 正则已同步更新
 
 ## 关键设计约定
 
@@ -69,3 +87,5 @@ INIT → RESUME → PLAN → EXECUTE (循环: verify→fix) → ARCHIVE
 - 改了 prompt 模板，需检查 `briefing.py` 中的对应部分是否一致
 - 改了目录结构，需更新 `orchestrator.py` 中的 `run_script()` 路径
 - 新增脚本时：放 `core/` 或 `roles/`，在 `__init__.py` 旁边，确保 sys.path 正确
+- 改了 `verify.py` 的输出格式，需同步更新 `orchestrator.py` 的 `extract_verify_errors()` 正则
+- `.cc-dev-framework/orchestrator.log` 已加入 `.gitignore`，不提交到仓库
