@@ -2,7 +2,7 @@
 
 用 Python 编排 Claude Code，自动完成软件项目开发。
 
-你给一个目标，框架驱动 Claude 自动规划 feature、写代码、跑测试、修 bug、提交合并。
+你给一个目标，框架驱动 Claude 自动分析需求、规划 feature、写代码、跑测试、修 bug、端到端验证、提交合并。
 
 ## 前置条件
 
@@ -33,9 +33,10 @@ python .cc-dev-framework/main.py --goal "用 FastAPI 写一个 TODO API，支持
 
 框架会自动：
 1. 初始化 git 仓库
-2. 调用 Claude 规划 feature（展示计划让你审批）
-3. 逐个 feature 执行：建分支 → Claude 写代码 → 验证 → 通过后合并
-4. 全部完成后归档
+2. 分析需求资料是否充足
+3. 调用 Claude 规划 feature（展示计划让你审批）
+4. 逐个 feature 执行：建分支 → Claude 写代码 → 机械验证 → E2E 测试 → 通过后合并
+5. 全部完成后归档
 
 ### 3. 查看进度
 
@@ -56,11 +57,12 @@ python .cc-dev-framework/main.py
 ```
 python .cc-dev-framework/main.py [options]
 
---goal "text"      项目目标（首次运行必填）
---auto-approve     跳过规划审批，直接开始执行
---max-retries N    每个 feature 验证失败后的最大重试次数（默认 3）
---feature ID       只处理指定 feature
---dry-run          只展示执行计划，不实际调用 Claude
+--goal "text"         项目目标（首次运行必填）
+--auto-approve        跳过规划审批，直接开始执行
+--max-retries N       每个 feature 验证失败后的最大重试次数（默认 3）
+--max-e2e-retries N   E2E 测试最大重试次数（默认 2）
+--feature ID          只处理指定 feature
+--dry-run             只展示执行计划，不实际调用 Claude
 ```
 
 ## 工作流
@@ -68,6 +70,9 @@ python .cc-dev-framework/main.py [options]
 ```
 你输入目标
     ↓
+[Analyst] Claude 分析需求资料是否充足
+    ↓ 资料不足？提示你补充
+    ↓ 资料充足？继续
 [Planner] Claude 分析项目，输出 features.json（2-8 个 feature）
     ↓
 你审批规划（或 --auto-approve 跳过）
@@ -78,10 +83,25 @@ python .cc-dev-framework/main.py [options]
     ↓ 失败？
 [Fixer] Claude 根据错误修复代码 → 重新验证（最多重试 N 次）
     ↓ 通过？
+[E2E Tester] Claude 端到端验证功能正确性
+    ↓ 失败？
+[Planner Judge] Claude 判定：修代码 or 调整规划 → 修复后重新测试
+    ↓ 通过？
 [Complete] git commit + merge 到主分支
     ↓
 [Archive] 全部完成后归档到 archive/vN.json
 ```
+
+## AI 角色
+
+| 角色 | 职责 |
+|------|------|
+| Analyst | 分析需求资料是否充足，输出结构化需求 |
+| Planner | 分析项目，生成 features.json 规划 |
+| Planner (Judge) | E2E 失败后判定：修代码 or 调整规划 |
+| Executor | 按步骤实现代码 |
+| Fixer | 根据验证错误修复代码 |
+| E2E Tester | 端到端验证功能正确性 |
 
 ## 目录结构
 
@@ -98,9 +118,11 @@ my-project/
 │   ├── progress.json           ← 会话记录
 │   ├── main.log                ← 运行日志（自动生成，每次清空）
 │   ├── roles/                  ← AI 角色（prompt 模板）
+│   │   ├── analyst.py
 │   │   ├── planner.py
 │   │   ├── executor.py
-│   │   └── fixer.py
+│   │   ├── fixer.py
+│   │   └── e2e_tester.py
 │   ├── src/                    ← 框架业务逻辑 + 验证
 │   │   ├── store.py
 │   │   ├── briefing.py
@@ -162,6 +184,15 @@ python .cc-dev-framework/main.py --auto-approve --goal "..."
 | verify_commands | 编译/测试命令全部 exit 0 |
 | git_branch | 在正确的 feature 分支上 |
 
+## E2E 测试
+
+验证门禁通过后，E2E 测试专员会进行端到端功能验证：
+
+- 不只是编译通过——验证功能逻辑正确
+- 如果需要，会启动项目并实际测试
+- 失败后由 Planner（判定模式）决定：修代码 or 调整规划
+- 最多重试 `--max-e2e-retries` 次（默认 2）
+
 ## 日志
 
 每次运行会生成日志文件 `.cc-dev-framework/main.log`（每次运行清空）。
@@ -198,6 +229,9 @@ A: 审批时输入 `n` 拒绝，然后换个 goal 描述重新跑。
 
 **Q: 某个 feature 反复验证失败？**
 A: 框架会在 max-retries 次后标记为 failed 并停止。检查 `status.py` 看错误信息，手动修复后可以用 `--feature ID` 单独重跑。
+
+**Q: E2E 测试受阻怎么办？**
+A: E2E_BLOCKED 表示测试无法执行（如项目无法启动），需要人工检查。修复后用 `--feature ID` 重跑。
 
 **Q: 想增加新一轮 feature？**
 A: 上一轮完成后 features 已归档，直接再跑一次 `python .cc-dev-framework/main.py` 并给新 goal 即可。
