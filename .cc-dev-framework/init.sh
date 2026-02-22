@@ -7,7 +7,7 @@
 # If this script fails, the project is in a broken state.
 # Fix it before starting any new feature work.
 #
-# AI fills this during the first iteration (project-setup feature).
+# Executor 在开发过程中按需填写。
 
 # Example:
 # pip install -r requirements.txt

@@ -26,7 +26,7 @@ def validate_plan(data: dict | None = None, is_first_iteration: bool = True) -> 
 
     Args:
         data: Raw features.json dict. If None, loads from disk.
-        is_first_iteration: If True, enforces project-setup as first feature.
+        is_first_iteration: Kept for signature compatibility; no longer used.
     """
     if data is None:
         data = load_features()
@@ -47,11 +47,9 @@ def validate_plan(data: dict | None = None, is_first_iteration: bool = True) -> 
         errors.append("'features' must be a list")
         return errors
 
-    # --- Check 2: Feature count (2-8) ---
-    if len(features) < 2:
-        errors.append(f"Too few features: {len(features)} (minimum 2)")
-    elif len(features) > 8:
-        errors.append(f"Too many features: {len(features)} (maximum 8)")
+    # --- Check 2: Feature count (at least 1) ---
+    if len(features) < 1:
+        errors.append(f"Too few features: {len(features)} (minimum 1)")
 
     # --- Check 3-8: Per-feature checks ---
     seen_ids: set[str] = set()
@@ -90,39 +88,19 @@ def validate_plan(data: dict | None = None, is_first_iteration: bool = True) -> 
                 errors.append(f"{prefix}: duplicate priority {priority}")
             seen_priorities.add(priority)
 
-        # Check 3: Step count (2-6)
+        # Check 3: Step count (at least 1)
         steps = f.get("steps", [])
         if isinstance(steps, list):
-            if len(steps) < 2:
-                errors.append(f"{prefix}: too few steps: {len(steps)} (minimum 2)")
-            elif len(steps) > 6:
-                errors.append(f"{prefix}: too many steps: {len(steps)} (maximum 6)")
+            if len(steps) < 1:
+                errors.append(f"{prefix}: too few steps: {len(steps)} (minimum 1)")
 
-        # Check 8: verify_commands two layers (compile + test)
+        # Check 8: verify_commands (at least 1)
         vc = f.get("verify_commands", [])
         if isinstance(vc, list):
-            if len(vc) < 2:
+            if len(vc) < 1:
                 errors.append(
-                    f"{prefix}: verify_commands needs at least 2 commands "
-                    f"(compile/type-check + test), got {len(vc)}"
+                    f"{prefix}: verify_commands needs at least 1 command, got {len(vc)}"
                 )
-
-    # --- Check: First iteration must start with project-setup ---
-    if is_first_iteration and features:
-        # Find the feature with priority 1 (or first feature if no priority 1)
-        first_feature = None
-        for f in features:
-            if isinstance(f, dict) and f.get("priority") == 1:
-                first_feature = f
-                break
-        if first_feature is None and features:
-            first_feature = features[0]
-
-        if first_feature and first_feature.get("id") != "project-setup":
-            errors.append(
-                f"First iteration's priority-1 feature must be 'project-setup', "
-                f"got '{first_feature.get('id', '?')}'"
-            )
 
     return errors
 

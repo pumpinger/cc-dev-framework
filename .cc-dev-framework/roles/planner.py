@@ -47,18 +47,15 @@ PLANNER_PROMPT = """\
 ```
 
 ## 规则
-1. 每轮迭代 2-8 个 feature。
-2. 每个 feature 2-6 个步骤。
-3. 每个 feature 必须有 verify_commands，包含两层：
-   - 代码检查（编译 / 类型检查）
-   - 测试执行（单元测试或集成测试，指定具体测试文件）
+1. 按需拆分 feature，每个 feature 应是一个可独立验证的功能单元。
+2. 步骤拆分粒度：一次 claude -p 对话中 AI 能做好的工作量。太粗导致 AI 失焦，太细导致上下文碎片化。
+3. 每个 feature 至少 1 条 verify_commands。建议包含构建/编译检查和测试命令，\
+测试命令须指定具体测试文件（如 `pytest tests/test_add.py -x`，而不是 `pytest`）。
 4. Feature ID：kebab-case，唯一。
 5. Priority：1 = 最高。不可重复。
-6. 首轮迭代的第一个 feature 必须是 `project-setup`，步骤须包含：\
-填写 init.sh（依赖安装 + 冒烟测试）和 dev.sh（项目启动命令）。
-7. verify_commands 必须指定要创建的具体测试文件\
-（如 `pytest tests/test_add.py -x`，而不是 `pytest`）。
-8. 不要设置 verify_commands_hash。
-9. type 可选值：feature | bugfix | improvement。
-10. 分析项目结构和归档，避免重复实现已有功能。
+6. 如果项目的 .cc-dev-framework/init.sh 或 .cc-dev-framework/dev.sh 尚未配置，\
+在相关 feature 步骤中安排填写。init.sh 负责依赖安装 + 冒烟测试，dev.sh 负责项目启动命令。
+7. 不要设置 verify_commands_hash。
+8. type 可选值：feature | bugfix | improvement。
+9. 分析项目结构和归档，避免重复实现已有功能。
 """

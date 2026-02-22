@@ -581,22 +581,9 @@ def main() -> None:
         sys.exit(1)
 
     if not run_init():
-        # init.sh failed — check if we even have features yet.
-        # If no features planned, init.sh is expected to fail (template state).
-        raw = load_features()
-        features = raw.get("features", [])
-        has_real_features = any(
-            f.get("id") != "example-feature" for f in features
-        )
-        if has_real_features:
-            msg = "错误: init.sh 执行失败且已有 feature 规划。请先修复 init.sh。"
-            print(f"[main] {msg}")
-            logger.error(msg)
-            sys.exit(1)
-        else:
-            msg = "init.sh 执行失败但尚无 feature 规划，继续进入规划阶段。"
-            print(f"[main] {msg}")
-            logger.info(msg)
+        msg = "警告: init.sh 执行失败，继续执行。Executor 将负责环境配置。"
+        print(f"[main] {msg}")
+        logger.warning(msg)
 
     # ---------------------------------------------------------------
     # 阶段 2: 断点恢复检查

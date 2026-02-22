@@ -143,6 +143,21 @@ def _read_dev_sh(project_dir: Path) -> str:
         return "（无法读取 dev.sh）"
 
 
+def _read_init_sh() -> str:
+    """Read init.sh content for executor context."""
+    framework_dir = Path(__file__).parent.parent
+    init_sh = framework_dir / "init.sh"
+    if not init_sh.exists():
+        return "（未找到 init.sh）"
+    try:
+        content = init_sh.read_text(encoding="utf-8", errors="replace").strip()
+        if "not configured yet" in content.lower() or "尚未配置" in content:
+            return "（init.sh 尚未配置）"
+        return f"```bash\n{content}\n```"
+    except Exception:
+        return "（无法读取 init.sh）"
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -169,10 +184,11 @@ def generate_planner_briefing(project_dir: Path, goal: str) -> str:
 {archive}
 
 ## 规划规则提醒
-- 2-8 个 feature，每个 2-6 个步骤
-- verify_commands：两层（编译 + 测试），指定具体测试文件
+- 每个 feature 是可独立验证的功能单元
+- 步骤粒度：一次 AI 对话能做好的工作量
+- verify_commands 至少 1 条，建议包含构建检查 + 测试
 - ID：kebab-case，priority 唯一
-- 首轮迭代 priority-1 = project-setup（填写 init.sh + dev.sh）
+- 如果 init.sh / dev.sh 未配置，安排步骤填写
 - 不要设置 verify_commands_hash
 """
 
@@ -202,6 +218,7 @@ def generate_executor_briefing(
 
     tree = _dir_tree(project_dir, max_depth=2)
     dev_sh = _read_dev_sh(project_dir)
+    init_sh = _read_init_sh()
 
     briefing = f"""\
 ## Feature: {feature.id}
@@ -216,6 +233,9 @@ def generate_executor_briefing(
 
 ## 项目启动方式（dev.sh）
 {dev_sh}
+
+## 依赖安装（init.sh）
+{init_sh}
 
 ## 项目结构
 ```
