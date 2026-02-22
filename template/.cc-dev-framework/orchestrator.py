@@ -81,17 +81,25 @@ def call_claude(
     max_turns: int = 10,
     allowed_tools: str | None = None,
     system_append: str | None = None,
+    stream: bool = False,
 ) -> dict:
-    """Call Claude Code in print mode and return parsed JSON output.
+    """Call Claude Code in print mode.
+
+    Args:
+        stream: If False (Planner), capture stdout for JSON parsing and let
+                stderr flow to terminal. If True (Executor/Fixer), inherit
+                both stdout and stderr so the user sees Claude's work live.
 
     Returns dict with keys: result, cost, duration, is_error
     """
     cmd = [
         "claude",
         "-p", prompt,
-        "--output-format", "json",
         "--max-turns", str(max_turns),
     ]
+
+    if not stream:
+        cmd.extend(["--output-format", "json"])
 
     if allowed_tools:
         cmd.extend(["--allowedTools", allowed_tools])
@@ -106,18 +114,35 @@ def call_claude(
     env.pop("CLAUDE_CODE", None)
     env.pop("CLAUDECODE", None)
 
-    print(f"[orchestrator] Calling Claude (max_turns={max_turns})...")
+    mode_label = "stream" if stream else "json"
+    print(f"[orchestrator] Calling Claude (max_turns={max_turns}, {mode_label})...")
 
     try:
-        proc = subprocess.run(
-            cmd,
-            cwd=str(PROJECT_DIR),
-            capture_output=True,
-            timeout=CLAUDE_TIMEOUT,
-            encoding="utf-8",
-            errors="replace",
-            env=env,
-        )
+        if stream:
+            # Inherit stdout+stderr so user sees Claude working in real-time
+            proc = subprocess.run(
+                cmd,
+                cwd=str(PROJECT_DIR),
+                timeout=CLAUDE_TIMEOUT,
+                env=env,
+            )
+            return {
+                "result": "",
+                "cost": None,
+                "duration": 0,
+                "is_error": proc.returncode != 0,
+            }
+        else:
+            # Capture stdout for JSON parsing; let stderr flow to terminal
+            proc = subprocess.run(
+                cmd,
+                cwd=str(PROJECT_DIR),
+                stdout=subprocess.PIPE,
+                timeout=CLAUDE_TIMEOUT,
+                encoding="utf-8",
+                errors="replace",
+                env=env,
+            )
     except subprocess.TimeoutExpired:
         return {
             "result": "",
@@ -135,15 +160,15 @@ def call_claude(
             "error": "claude command not found. Is Claude Code CLI installed?",
         }
 
-    # Parse JSON output
+    # Parse JSON output (only reached when stream=False)
     raw = proc.stdout
     if proc.returncode != 0:
         return {
-            "result": raw or proc.stderr,
+            "result": raw,
             "cost": None,
             "duration": 0,
             "is_error": True,
-            "error": f"Claude exited with code {proc.returncode}: {proc.stderr[:500]}",
+            "error": f"Claude exited with code {proc.returncode}",
         }
 
     try:
@@ -807,12 +832,12 @@ def _run_executor(feature: Feature) -> None:
         prompt,
         max_turns=30,
         system_append=system_note,
+        stream=True,
     )
 
     if result.get("is_error"):
-        err = result.get("error", "unknown error")
-        print(f"[orchestrator] Claude executor error: {err}")
-        update_feature_field(feature.id, error=f"Executor error: {err}")
+        print(f"[orchestrator] Claude executor returned non-zero exit code")
+        update_feature_field(feature.id, error="Executor error")
         # Don't mark failed — verify loop will assess the situation
 
 
@@ -836,10 +861,11 @@ def _run_fixer(feature: Feature, verify_output: str) -> None:
         prompt,
         max_turns=20,
         system_append=system_note,
+        stream=True,
     )
 
     if result.get("is_error"):
-        print(f"[orchestrator] Claude fixer error: {result.get('error', '')}")
+        print(f"[orchestrator] Claude fixer returned non-zero exit code")
 
 
 # ===================================================================
