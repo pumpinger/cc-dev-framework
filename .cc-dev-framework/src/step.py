@@ -1,6 +1,6 @@
 """标记步骤完成 — 记录完成证据。
 
-Usage: python .cc-dev-framework/core/step.py -f <feature-id> -s <step-index> -e "evidence text"
+Usage: python .cc-dev-framework/src/step.py -f <feature-id> -s <step-index> -e "evidence text"
 """
 
 from __future__ import annotations

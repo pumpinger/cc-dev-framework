@@ -20,7 +20,8 @@ cc-dev-framework/               ← 仓库根目录
 └── .cc-dev-framework/          ← 被拷贝到目标项目的框架目录
     ├── main.py                 ← 主入口
     ├── status.py               ← 进度查看
-    ├── init.sh                 ← 项目初始化模板
+    ├── init.sh                 ← 依赖安装 + 冒烟测试（project-setup 填写）
+    ├── dev.sh                  ← 项目启动命令（project-setup 填写）
     ├── features.json           ← 功能规划数据
     ├── progress.json           ← 会话进度记录
     ├── main.log                ← 运行日志（每次运行清空）
@@ -28,16 +29,17 @@ cc-dev-framework/               ← 仓库根目录
     │   ├── planner.py          ← Planner prompt 模板
     │   ├── executor.py         ← Executor prompt 模板
     │   ├── fixer.py            ← Fixer prompt 模板
-    │   ├── briefing.py         ← 上下文压缩，注入项目信息给 Claude
     │   ├── verify.py           ← 4 项门禁（steps_done, evidence, commands, branch）
     │   └── validate_plan.py    ← 规划质量检查（8 项）
-    └── core/                   ← 基础设施
-        ├── store.py            ← 数据模型 + features.json 原子读写
-        ├── log.py              ← 日志模块（setup_logging + get_logger）
-        ├── start.py            ← 建 feature 分支 + 设 in_progress
-        ├── step.py             ← Executor 调用：标记步骤完成 + 写证据
-        ├── complete.py         ← commit → merge → 标记 completed
-        └── archive.py          ← 归档已完成 feature 到 vN.json
+    ├── src/                    ← 框架业务逻辑
+    │   ├── store.py            ← 数据模型 + features.json 原子读写
+    │   ├── briefing.py         ← 上下文压缩，注入项目信息给 Claude
+    │   ├── start.py            ← 建 feature 分支 + 设 in_progress
+    │   ├── step.py             ← Executor 调用：标记步骤完成 + 写证据
+    │   ├── complete.py         ← commit → merge → 标记 completed
+    │   └── archive.py          ← 归档已完成 feature 到 vN.json
+    └── utils/                  ← 通用工具（与框架业务无关）
+        └── log.py              ← 日志模块（setup_logging + get_logger）
 ```
 
 ## 工作流（main.py 的 5 个阶段）
@@ -54,6 +56,13 @@ INIT → RESUME → PLAN → EXECUTE (循环: verify→fix) → ARCHIVE
 | EXECUTE | 按 priority 逐个 feature：start.py 建分支 → Claude (Executor) 写代码 → verify.py 门禁 → 失败则 Claude (Fixer) 修复 → 通过后 complete.py 提交合并 |
 | ARCHIVE | 所有 feature 完成后归档到 archive/vN.json |
 
+## init.sh 与 dev.sh
+
+- `init.sh` — 依赖安装 + 冒烟测试。main.py 阶段 1 运行，失败则阻止继续
+- `dev.sh` — 项目启动命令。不由 main.py 运行，而是注入到 executor briefing 中，让 Claude 知道怎么跑项目
+- 两者都是模板文件，由 Planner 规划的 `project-setup` feature 中由 Executor 填写
+- Planner prompt 规则第 6 条要求首轮迭代的 project-setup 同时填写这两个文件
+
 ## call_claude() 的两种模式
 
 - `stream=False`（Planner 用）：`stdout=PIPE` 捕获 JSON 输出解析，stderr 流到终端
@@ -61,7 +70,7 @@ INIT → RESUME → PLAN → EXECUTE (循环: verify→fix) → ARCHIVE
 
 ## 日志系统
 
-- `core/log.py` 提供 `setup_logging()` + `get_logger()`
+- `utils/log.py` 提供 `setup_logging()` + `get_logger()`
 - 日志文件：`.cc-dev-framework/main.log`，每次运行 `mode="w"` 清空
 - 格式：`[2026-02-22 14:30:05] [INFO] main: 消息`
 - main.py 在 `main()` 开头调 `setup_logging()`，所有关键操作同时 print + logger
@@ -79,8 +88,8 @@ INIT → RESUME → PLAN → EXECUTE (循环: verify→fix) → ARCHIVE
 ## 关键设计约定
 
 - 所有路径用 `Path(__file__).parent` 计算，拷贝到任何项目后自动适配
-- `core/store.py` 定义 `FRAMEWORK_DIR` 和 `PROJECT_DIR`，其他脚本 import 它
-- `roles/` 下脚本需要 store 时：`sys.path.insert(0, str(Path(__file__).parent.parent / "core"))`
+- `src/store.py` 定义 `FRAMEWORK_DIR` 和 `PROJECT_DIR`，其他脚本 import 它
+- `roles/` 下脚本需要 store 时：`sys.path.insert(0, str(Path(__file__).parent.parent / "src"))`
 - Windows 兼容：`reconfigure(encoding="utf-8")` 或 `TextIOWrapper`，bash 路径用 `as_posix()`
 - features.json 写入用原子操作（temp file + rename）
 
@@ -89,6 +98,6 @@ INIT → RESUME → PLAN → EXECUTE (循环: verify→fix) → ARCHIVE
 - 改了 `store.py` 的数据模型，需同步检查 `verify.py`、`complete.py`、`status.py`
 - 改了 prompt 模板（`planner.py`/`executor.py`/`fixer.py`），需检查 `briefing.py` 中的对应部分是否一致
 - 改了目录结构，需更新 `main.py` 中的 `run_script()` 路径
-- 新增脚本时：放 `core/` 或 `roles/`，确保 sys.path 正确
+- 新增脚本时：放 `src/`（框架逻辑）或 `utils/`（通用工具），确保 sys.path 正确
 - 改了 `verify.py` 的输出格式，需同步更新 `main.py` 的 `extract_verify_errors()` 正则
 - `.cc-dev-framework/main.log` 已加入 `.gitignore`（`*.log` 规则覆盖），不提交到仓库

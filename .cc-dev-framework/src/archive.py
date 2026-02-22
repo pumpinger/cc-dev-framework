@@ -1,6 +1,6 @@
 """归档 — 将已完成的 feature 移动到 archive/vN.json。
 
-Usage: python .cc-dev-framework/core/archive.py
+Usage: python .cc-dev-framework/src/archive.py
 
 将 features.json 中所有 completed 的 feature 归档到 archive/vN.json，
 保持 features.json 干净以便下一轮迭代。

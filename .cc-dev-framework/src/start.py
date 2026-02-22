@@ -1,6 +1,6 @@
 """启动 feature — 创建分支 + 设置状态为 in_progress。
 
-Usage: python .cc-dev-framework/core/start.py -f <feature-id>
+Usage: python .cc-dev-framework/src/start.py -f <feature-id>
 """
 
 from __future__ import annotations

@@ -92,24 +92,26 @@ my-project/
 ├── .cc-dev-framework/
 │   ├── main.py                 ← 主入口
 │   ├── status.py               ← 查进度
-│   ├── init.sh                 ← 环境初始化（自动被 Planner 填充）
+│   ├── init.sh                 ← 依赖安装 + 冒烟测试（project-setup 填写）
+│   ├── dev.sh                  ← 项目启动命令（project-setup 填写）
 │   ├── features.json           ← 功能规划数据
 │   ├── progress.json           ← 会话记录
-│   ├── main.log        ← 运行日志（自动生成，每次清空）
+│   ├── main.log                ← 运行日志（自动生成，每次清空）
 │   ├── roles/                  ← AI 角色 + 验证
 │   │   ├── planner.py
 │   │   ├── executor.py
 │   │   ├── fixer.py
-│   │   ├── briefing.py
 │   │   ├── verify.py
 │   │   └── validate_plan.py
-│   └── core/                   ← 基础设施
-│       ├── store.py
-│       ├── log.py
-│       ├── start.py
-│       ├── step.py
-│       ├── complete.py
-│       └── archive.py
+│   ├── src/                    ← 框架业务逻辑
+│   │   ├── store.py
+│   │   ├── briefing.py
+│   │   ├── start.py
+│   │   ├── step.py
+│   │   ├── complete.py
+│   │   └── archive.py
+│   └── utils/                  ← 通用工具
+│       └── log.py
 ├── (你的项目代码，由 Claude 生成)
 └── .git/
 ```

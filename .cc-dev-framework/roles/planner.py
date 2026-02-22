@@ -54,8 +54,8 @@ PLANNER_PROMPT = """\
    - 测试执行（单元测试或集成测试，指定具体测试文件）
 4. Feature ID：kebab-case，唯一。
 5. Priority：1 = 最高。不可重复。
-6. 首轮迭代的第一个 feature 必须是 `project-setup`\
-（在 init.sh 中填写依赖安装 + 冒烟测试）。
+6. 首轮迭代的第一个 feature 必须是 `project-setup`，步骤须包含：\
+填写 init.sh（依赖安装 + 冒烟测试）和 dev.sh（项目启动命令）。
 7. verify_commands 必须指定要创建的具体测试文件\
 （如 `pytest tests/test_add.py -x`，而不是 `pytest`）。
 8. 不要设置 verify_commands_hash。

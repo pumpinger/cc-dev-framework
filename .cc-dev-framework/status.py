@@ -17,7 +17,7 @@ if sys.platform == "win32":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 FRAMEWORK_DIR = Path(__file__).parent
-sys.path.insert(0, str(FRAMEWORK_DIR / "core"))
+sys.path.insert(0, str(FRAMEWORK_DIR / "src"))
 from store import load_features, Feature, list_archives, load_archive, ARCHIVE_DIR, PROJECT_DIR
 
 

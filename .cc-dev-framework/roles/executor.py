@@ -9,7 +9,7 @@ EXECUTOR_PROMPT = """\
 ## 规则
 1. 按顺序实现步骤，从步骤 {start_step} 开始。
 2. 每完成一个步骤后，运行：
-   `python .cc-dev-framework/core/step.py -f {feature_id} -s <N> -e "完成证据"`
+   `python .cc-dev-framework/src/step.py -f {feature_id} -s <N> -e "完成证据"`
    其中 <N> 是步骤索引（从 0 开始），证据描述你做了什么。
 3. 不要运行 verify.py、complete.py 或 archive.py —— 编排器负责验证。
 4. 不要直接修改 features.json。

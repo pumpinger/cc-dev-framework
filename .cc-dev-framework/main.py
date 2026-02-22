@@ -32,8 +32,9 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
 
 # Imports from core/ and roles/
 FRAMEWORK_DIR = Path(__file__).parent
-sys.path.insert(0, str(FRAMEWORK_DIR / "core"))
+sys.path.insert(0, str(FRAMEWORK_DIR / "src"))
 sys.path.insert(0, str(FRAMEWORK_DIR / "roles"))
+sys.path.insert(0, str(FRAMEWORK_DIR / "utils"))
 from briefing import generate_executor_briefing, generate_planner_briefing
 from log import get_logger, setup_logging
 from planner import PLANNER_PROMPT
@@ -846,7 +847,7 @@ def main() -> None:
         print()
         print("[阶段 5] 正在归档已完成的 feature...")
         logger.info("=== 阶段 5: 归档 ===")
-        run_script("core/archive.py")
+        run_script("src/archive.py")
 
     # ---------------------------------------------------------------
     # 完成
@@ -883,7 +884,7 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
 
     # Start feature (create branch + set in_progress) if still pending
     if feature.status == "pending":
-        rc = run_script("core/start.py", "-f", feature.id)
+        rc = run_script("src/start.py", "-f", feature.id)
         if rc != 0:
             msg = f"错误: start.py 对 {feature.id} 执行失败"
             print(f"[main] {msg}")
@@ -909,7 +910,7 @@ def _execute_feature(feature: Feature, max_retries: int) -> bool:
             print(f"\n[main] {msg}")
             logger.info(msg)
             commit_msg = f"feat({feature.id}): {feature.title}"
-            rc = run_script("core/complete.py", "-f", feature.id, "-m", commit_msg)
+            rc = run_script("src/complete.py", "-f", feature.id, "-m", commit_msg)
             if rc != 0:
                 msg = f"警告: complete.py 对 {feature.id} 执行失败"
                 print(f"[main] {msg}")

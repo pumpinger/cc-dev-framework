@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
+sys.path.insert(0, str(Path(__file__).parent))
 from store import (
     ARCHIVE_DIR,
     Feature,
@@ -123,6 +123,27 @@ def _archive_summary() -> str:
 
 
 # ---------------------------------------------------------------------------
+# dev.sh content
+# ---------------------------------------------------------------------------
+
+def _read_dev_sh(project_dir: Path) -> str:
+    """Read dev.sh content for executor context."""
+    # dev.sh is in the framework dir, not project dir
+    framework_dir = Path(__file__).parent.parent
+    dev_sh = framework_dir / "dev.sh"
+    if not dev_sh.exists():
+        return "（未找到 dev.sh）"
+    try:
+        content = dev_sh.read_text(encoding="utf-8", errors="replace").strip()
+        # Check if it's still the unconfigured template
+        if "尚未配置" in content:
+            return "（dev.sh 尚未配置）"
+        return f"```bash\n{content}\n```"
+    except Exception:
+        return "（无法读取 dev.sh）"
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -151,7 +172,7 @@ def generate_planner_briefing(project_dir: Path, goal: str) -> str:
 - 2-8 个 feature，每个 2-6 个步骤
 - verify_commands：两层（编译 + 测试），指定具体测试文件
 - ID：kebab-case，priority 唯一
-- 首轮迭代 priority-1 = project-setup（init.sh）
+- 首轮迭代 priority-1 = project-setup（填写 init.sh + dev.sh）
 - 不要设置 verify_commands_hash
 """
 
@@ -180,6 +201,7 @@ def generate_executor_briefing(
     vc_text = "\n".join(f"  {cmd}" for cmd in feature.verify_commands)
 
     tree = _dir_tree(project_dir, max_depth=2)
+    dev_sh = _read_dev_sh(project_dir)
 
     briefing = f"""\
 ## Feature: {feature.id}
@@ -192,6 +214,9 @@ def generate_executor_briefing(
 ## verify_commands（不要修改）
 {vc_text}
 
+## 项目启动方式（dev.sh）
+{dev_sh}
+
 ## 项目结构
 ```
 {tree}
@@ -199,7 +224,7 @@ def generate_executor_briefing(
 
 ## 提醒
 - 每完成一个步骤后运行 \
-`python .cc-dev-framework/core/step.py -f {feature.id} -s <N> -e "完成证据"`。
+`python .cc-dev-framework/src/step.py -f {feature.id} -s <N> -e "完成证据"`。
 - 不要运行 verify.py / complete.py / archive.py。
 - 编写 verify_commands 中引用的测试文件。
 - 所有步骤完成后输出 EXECUTOR_DONE。

@@ -1,6 +1,6 @@
 """完成 feature — 验证 + 提交 + 合并 + 标记完成。
 
-Usage: python .cc-dev-framework/core/complete.py -f <feature-id> -m "commit message"
+Usage: python .cc-dev-framework/src/complete.py -f <feature-id> -m "commit message"
 """
 
 from __future__ import annotations
