@@ -158,6 +158,21 @@ def _read_init_sh() -> str:
         return "（无法读取 init.sh）"
 
 
+def _read_cleanup_sh() -> str:
+    """Read cleanup.sh content for executor/e2e_tester context."""
+    framework_dir = Path(__file__).parent.parent
+    cleanup_sh = framework_dir / "cleanup.sh"
+    if not cleanup_sh.exists():
+        return "（未找到 cleanup.sh）"
+    try:
+        content = cleanup_sh.read_text(encoding="utf-8", errors="replace").strip()
+        if "not configured yet" in content.lower() or "尚未配置" in content:
+            return "（cleanup.sh 尚未配置）"
+        return f"```bash\n{content}\n```"
+    except Exception:
+        return "（无法读取 cleanup.sh）"
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -219,6 +234,7 @@ def generate_executor_briefing(
     tree = _dir_tree(project_dir, max_depth=2)
     dev_sh = _read_dev_sh(project_dir)
     init_sh = _read_init_sh()
+    cleanup_sh = _read_cleanup_sh()
 
     briefing = f"""\
 ## Feature: {feature.id}
@@ -236,6 +252,9 @@ def generate_executor_briefing(
 
 ## 依赖安装（init.sh）
 {init_sh}
+
+## 进程清理（cleanup.sh）
+{cleanup_sh}
 
 ## 项目结构
 ```
@@ -295,6 +314,7 @@ def generate_e2e_briefing(project_dir: Path, feature: Feature) -> str:
     vc_text = "\n".join(f"  {cmd}" for cmd in feature.verify_commands)
     tree = _dir_tree(project_dir, max_depth=2)
     dev_sh = _read_dev_sh(project_dir)
+    cleanup_sh = _read_cleanup_sh()
 
     briefing = f"""\
 ## Feature: {feature.id}
@@ -308,6 +328,9 @@ def generate_e2e_briefing(project_dir: Path, feature: Feature) -> str:
 
 ## 项目启动方式（dev.sh）
 {dev_sh}
+
+## 进程清理（cleanup.sh）
+{cleanup_sh}
 
 ## 项目结构
 ```

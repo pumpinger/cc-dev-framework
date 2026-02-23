@@ -17,7 +17,8 @@ EXECUTOR_PROMPT = """\
 6. 编写 verify_commands 中指定的测试文件作为交付物。
 7. 只专注于当前 feature，不要处理其他 feature。
 8. 完成所有步骤后，输出：EXECUTOR_DONE
-9. 如果项目的 .cc-dev-framework/init.sh 或 .cc-dev-framework/dev.sh 包含模板占位文本\
-（'not configured yet' 或 '尚未配置'），在实现过程中填写它们。\
-init.sh 负责依赖安装 + 冒烟测试，dev.sh 负责项目启动命令。
+9. 如果项目的 .cc-dev-framework/init.sh、.cc-dev-framework/dev.sh 或 .cc-dev-framework/cleanup.sh \
+包含模板占位文本（'not configured yet' 或 '尚未配置'），在实现过程中填写它们。\
+init.sh 负责依赖安装 + 冒烟测试，dev.sh 负责项目启动命令，\
+cleanup.sh 负责杀掉后台进程（如 uvicorn、node）以释放文件锁。
 """

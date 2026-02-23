@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 import io
-import os
 import subprocess
 import sys
 import time
@@ -21,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from store import get_feature, update_feature_field, PROJECT_DIR
 
 VERIFY_SCRIPT = Path(__file__).parent / "verify.py"
+CLEANUP_SCRIPT = Path(__file__).parent.parent / "cleanup.sh"
 
 
 def _run(cmd, **kwargs):
@@ -89,8 +89,11 @@ def main():
     # 3. Detect main branch name
     main_branch = _detect_main_branch()
 
-    # 4. Merge
+    # 4. Cleanup + Merge
     print(f"\n=== 合并 {branch} -> {main_branch} ===")
+
+    # Kill background processes before merge to release file locks
+    _run_cleanup()
 
     # Stash any dirty files (e.g. session.log, crm.db written during execution).
     # These are runtime artifacts — drop them after merge, don't restore.
@@ -107,15 +110,6 @@ def main():
     _clean_worktree()
 
     rc, out = _git("merge", branch, "--no-edit")
-
-    # If merge fails due to untracked files (git clean may miss locked files on Windows),
-    # parse the blocking paths, force-remove them with retries, and retry merge once.
-    if rc != 0 and "untracked working tree files would be overwritten" in out:
-        print("git clean 未能清除所有文件，尝试强制删除后重试...")
-        _force_remove_blocking_files(out)
-        _clean_worktree()
-        rc, out = _git("merge", branch, "--no-edit")
-
     if rc != 0:
         print(f"git merge 失败: {out}")
         _git("stash", "drop")
@@ -135,46 +129,25 @@ def main():
     print(f"已合并到: {main_branch}")
 
 
+def _run_cleanup():
+    """Run cleanup.sh to kill background processes before merge.
+
+    Failures are warnings only — do not block the merge.
+    """
+    if not CLEANUP_SCRIPT.exists():
+        return
+    print("运行 cleanup.sh 清理后台进程...")
+    rc, out = _run(["bash", CLEANUP_SCRIPT.as_posix()])
+    if rc != 0:
+        print(f"警告: cleanup.sh 返回非零退出码 ({rc}): {out}")
+    # Give Windows time to release file handles after processes are killed
+    time.sleep(1)
+
+
 def _clean_worktree():
     """Remove all untracked/ignored files and reset tracked files to HEAD."""
     _git("clean", "-fdx")
     _git("checkout", "--", ".")
-
-
-def _force_remove_blocking_files(merge_output: str):
-    """Parse 'untracked working tree files' from merge error and force-delete them.
-
-    On Windows, files may be locked by lingering processes (e.g. uvicorn holding
-    a SQLite .db). Retries with a short sleep to wait for handle release.
-    """
-    in_file_list = False
-    for line in merge_output.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("error:") and "untracked working tree files" in stripped:
-            in_file_list = True
-            continue
-        if in_file_list:
-            if stripped.startswith(("Please ", "Aborting")):
-                break
-            if stripped:
-                filepath = PROJECT_DIR / stripped
-                _force_delete(filepath)
-
-
-def _force_delete(filepath: Path):
-    """Delete a file with retries for Windows file locking."""
-    for attempt in range(5):
-        try:
-            if filepath.is_dir():
-                import shutil
-                shutil.rmtree(filepath, ignore_errors=True)
-            elif filepath.exists():
-                os.remove(filepath)
-            return
-        except (PermissionError, OSError):
-            time.sleep(0.5 * (attempt + 1))
-    # Last resort: ignore failure — merge will report the real error
-    print(f"警告: 无法删除 {filepath}")
 
 
 def _detect_main_branch():
