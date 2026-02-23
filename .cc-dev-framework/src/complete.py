@@ -101,8 +101,9 @@ def main():
         _git("stash", "drop")
         sys.exit(1)
 
-    # Remove untracked runtime artifacts (e.g. e2e_test.db) that would block merge
-    _git("clean", "-fd")
+    # Remove ALL untracked files including gitignored ones (e.g. *.db matched by .gitignore).
+    # -fdx is needed because -fd skips ignored files, which still block merge.
+    _git("clean", "-fdx")
     # Reset tracked files to HEAD (e.g. todolist.db dirtied by lingering background processes)
     _git("checkout", "--", ".")
 
