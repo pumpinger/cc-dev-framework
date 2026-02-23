@@ -103,6 +103,8 @@ def main():
 
     # Remove untracked runtime artifacts (e.g. e2e_test.db) that would block merge
     _git("clean", "-fd")
+    # Reset tracked files to HEAD (e.g. todolist.db dirtied by lingering background processes)
+    _git("checkout", "--", ".")
 
     rc, out = _git("merge", branch, "--no-edit")
     if rc != 0:
