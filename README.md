@@ -46,7 +46,19 @@ python .cc-dev-framework/status.py
 
 ### 4. 断点恢复
 
-中途中断了？再跑一次就行，框架会自动检测 in_progress 的 feature 并恢复：
+中途中断了？框架会提示你当前进度和恢复命令，再跑一次就行：
+
+```
+============================================================
+  程序异常退出
+============================================================
+  错误: ...
+  当前 feature: backend-team-api (后端团队管理 API)
+
+  重新运行即可从断点恢复:
+    python .cc-dev-framework/main.py
+============================================================
+```
 
 ```bash
 python .cc-dev-framework/main.py
@@ -111,8 +123,9 @@ my-project/
 ├── .cc-dev-framework/
 │   ├── main.py                 ← 主入口
 │   ├── status.py               ← 查进度
-│   ├── init.sh                 ← 依赖安装 + 冒烟测试（project-setup 填写）
-│   ├── dev.sh                  ← 项目启动命令（project-setup 填写）
+│   ├── init.sh                 ← 依赖安装 + 冒烟测试（Executor 填写）
+│   ├── dev.sh                  ← 项目启动命令（Executor 填写）
+│   ├── cleanup.sh              ← 杀后台进程 + 释放文件锁（Executor 填写）
 │   ├── features.json           ← 功能规划数据
 │   ├── progress.json           ← 会话记录
 │   ├── session.log             ← 运行日志（自动生成，每次清空）
@@ -222,7 +235,7 @@ cat .cc-dev-framework/session.log
 ## 常见问题
 
 **Q: Claude 跑到一半断了怎么办？**
-A: 再运行一次 `python .cc-dev-framework/main.py`，会自动恢复。
+A: 框架会在异常退出时提示当前 feature 和恢复命令。再运行一次 `python .cc-dev-framework/main.py` 即可从断点恢复。
 
 **Q: 规划不满意怎么办？**
 A: 审批时输入 `n` 拒绝，然后换个 goal 描述重新跑。
