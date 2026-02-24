@@ -80,6 +80,9 @@ def _handle_sigint(signum, frame):
     print(f"\n[main] {msg}")
     logger.warning(msg)
     _save_progress("被用户中断", [])
+    print()
+    print("  重新运行即可从断点恢复:")
+    print("    python .cc-dev-framework/main.py")
     sys.exit(130)
 
 
@@ -1256,4 +1259,32 @@ def _run_e2e_tester(feature: Feature) -> tuple[str, str, str]:
 # ===================================================================
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        # SIGINT handler already prints a message; this is a fallback.
+        pass
+    except Exception as exc:
+        # Unexpected crash — print resume hint so user knows they can re-run.
+        print()
+        print("=" * 60)
+        print("  程序异常退出")
+        print("=" * 60)
+        print(f"  错误: {exc}")
+
+        # Try to show which feature was in progress
+        try:
+            raw = load_features()
+            for fd in raw.get("features", []):
+                if fd.get("status") == "in_progress":
+                    print(f"  当前 feature: {fd['id']} ({fd.get('title', '')})")
+                    break
+        except Exception:
+            pass
+
+        print()
+        print("  重新运行即可从断点恢复:")
+        print("    python .cc-dev-framework/main.py")
+        print("=" * 60)
+        logger.error("异常退出: %s", exc, exc_info=True)
+        sys.exit(1)
