@@ -59,11 +59,80 @@ from validate_plan import validate_plan
 
 PROJECT_DIR = FRAMEWORK_DIR.parent
 PROGRESS_PATH = FRAMEWORK_DIR / "progress.json"
+SESSION_LOCK = FRAMEWORK_DIR / ".session_lock"
 
 # Claude command timeout (seconds)
 CLAUDE_TIMEOUT = 600  # 10 minutes
 
 logger = get_logger("main")
+
+
+# ===================================================================
+# Session lock — detect unclean exits (OOM, SIGKILL, etc.)
+# ===================================================================
+
+def _write_session_lock(phase: str, feature_id: str | None = None) -> None:
+    """Write a session lock file with current phase/feature info.
+
+    On clean exit the lock is removed. If the process is killed by the OS
+    (OOM, SIGKILL), the lock survives and is detected on next startup.
+    """
+    from datetime import datetime
+    info = {
+        "pid": os.getpid(),
+        "phase": phase,
+        "feature": feature_id,
+        "started_at": datetime.now().isoformat(),
+    }
+    try:
+        with open(SESSION_LOCK, "w", encoding="utf-8") as f:
+            json.dump(info, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def _remove_session_lock() -> None:
+    """Remove the session lock file (clean exit)."""
+    try:
+        SESSION_LOCK.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def _check_stale_session_lock() -> None:
+    """Check for a stale session lock from a previous crashed run.
+
+    If found, print diagnostic info and remove it.
+    """
+    if not SESSION_LOCK.exists():
+        return
+    try:
+        with open(SESSION_LOCK, encoding="utf-8") as f:
+            info = json.load(f)
+    except Exception:
+        SESSION_LOCK.unlink(missing_ok=True)
+        return
+
+    print()
+    print("=" * 60)
+    print("  检测到上次运行异常终止（进程被系统杀死）")
+    print("=" * 60)
+    phase = info.get("phase", "未知")
+    feature = info.get("feature")
+    started = info.get("started_at", "未知")
+    print(f"  终止阶段: {phase}")
+    if feature:
+        print(f"  当时 feature: {feature}")
+    print(f"  启动时间: {started}")
+    print()
+    print("  可能原因: 系统内存不足（OOM），进程被操作系统强制终止。")
+    print("  建议: 关闭其他占内存的程序后重新运行。")
+    print("=" * 60)
+    print()
+    logger.warning("检测到上次异常终止: phase=%s, feature=%s, started=%s",
+                    phase, feature, started)
+
+    SESSION_LOCK.unlink(missing_ok=True)
 
 
 # ===================================================================
@@ -80,6 +149,7 @@ def _handle_sigint(signum, frame):
     print(f"\n[main] {msg}")
     logger.warning(msg)
     _save_progress("被用户中断", [])
+    _remove_session_lock()
     print()
     print("  重新运行即可从断点恢复:")
     print("    python .cc-dev-framework/main.py")
@@ -566,6 +636,9 @@ def main() -> None:
     setup_logging()
     logger.info("启动, args=%s", vars(args))
 
+    # Detect previous unclean exit (OOM, SIGKILL, etc.)
+    _check_stale_session_lock()
+
     print()
     print("=" * 60)
     print("  cc-dev-framework 编排器")
@@ -575,6 +648,7 @@ def main() -> None:
     # ---------------------------------------------------------------
     # 阶段 1: 初始化
     # ---------------------------------------------------------------
+    _write_session_lock("阶段 1: 初始化")
     print("[阶段 1] 正在初始化...")
     logger.info("=== 阶段 1: 初始化 ===")
     if not _ensure_git_repo():
@@ -920,6 +994,7 @@ def main() -> None:
         f"编排器运行完毕。{len(completed_ids)} 个 feature 已完成。",
         completed_ids,
     )
+    _remove_session_lock()
     msg = "执行完毕。"
     print(f"[main] {msg}")
     logger.info(msg)
@@ -947,6 +1022,7 @@ def _execute_feature(feature: Feature, max_retries: int, max_e2e_retries: int) -
     print(f"  正在执行: {feature.id} ({feature.title})")
     print(f"{'=' * 60}")
     logger.info("开始执行 feature: %s (%s)", feature.id, feature.title)
+    _write_session_lock("Executor 实现代码", feature.id)
 
     # Start feature (create branch + set in_progress) if pending or failed
     if feature.status in ("pending", "failed"):
@@ -970,6 +1046,7 @@ def _execute_feature(feature: Feature, max_retries: int, max_e2e_retries: int) -
     # --- E2E testing loop ---
     # Semantics: first E2E test + up to max_e2e_retries fix-then-retest cycles.
     # So max_e2e_retries=2 means: 1 initial E2E + 2 fix attempts = 3 E2E tests total.
+    _write_session_lock("E2E 测试", feature.id)
 
     # Initial E2E test
     msg = f"E2E 测试: {feature.id}"
@@ -1263,9 +1340,14 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         # SIGINT handler already prints a message; this is a fallback.
-        pass
+        _remove_session_lock()
+    except SystemExit:
+        # sys.exit() from within main() — controlled exit, remove lock.
+        _remove_session_lock()
+        raise
     except Exception as exc:
         # Unexpected crash — print resume hint so user knows they can re-run.
+        _remove_session_lock()
         print()
         print("=" * 60)
         print("  程序异常退出")

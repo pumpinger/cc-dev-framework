@@ -10,4 +10,5 @@ build/
 venv/
 .env
 *.log
+.session_lock
 .pytest_cache/
