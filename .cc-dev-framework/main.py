@@ -1338,6 +1338,7 @@ def _run_e2e_tester(feature: Feature) -> tuple[str, str, str]:
 if __name__ == "__main__":
     try:
         main()
+        _remove_session_lock()  # Normal completion (including dry-run returns)
     except KeyboardInterrupt:
         # SIGINT handler already prints a message; this is a fallback.
         _remove_session_lock()
